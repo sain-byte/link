@@ -3,6 +3,7 @@ const API_URL = 'https://script.google.com/macros/s/AKfycbz0HZYFjnmmeqbc8glkw3aM
 let allLinks = [];
 let allCategories = [];
 let selectedCategory = 'ALL';
+let pendingOpenUrl = '';
 let adminPass = localStorage.getItem('sainbyte_admin_pass') || null;
 
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -81,59 +82,35 @@ async function fetchData() {
   }
 }
 
-// --- URL & MULTI-SOURCE FAVICON HELPERS ---
+// --- URL HELPERS ---
 function normalizeUrl(rawUrl) {
   let u = (rawUrl || '').trim();
   if (!u) return '';
-  if (!/^https?:\/\//i.test(u)) {
-    u = 'https://' + u;
-  }
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
   return u;
 }
 
-function getFaviconSources(url) {
-  try {
-    const full = normalizeUrl(url);
-    const parsed = new URL(full);
-    const origin = parsed.origin;
-    const basePath = full.replace(/\/[^\/]*\.[^\/]*$/, '').replace(/\/$/, '');
-
-    return {
-      directPng: `${origin}/favicon.png`,
-      subPng: `${basePath}/favicon.png`,
-      directIco: `${origin}/favicon.ico`,
-      google: `https://www.google.com/s2/favicons?domain_url=${encodeURIComponent(full)}&sz=64`
-    };
-  } catch {
-    return { directPng: '', subPng: '', directIco: '', google: '' };
-  }
-}
-
-function handleFaviconError(imgEl, subPng, icoUrl, googleUrl) {
-  const step = imgEl.dataset.step || '0';
-  if (step === '0' && subPng) {
-    imgEl.dataset.step = '1';
-    imgEl.src = subPng;
-  } else if (step === '1' && icoUrl) {
-    imgEl.dataset.step = '2';
-    imgEl.src = icoUrl;
-  } else if (step === '2' && googleUrl) {
-    imgEl.dataset.step = '3';
-    imgEl.src = googleUrl;
-  } else {
-    imgEl.style.display = 'none';
-    if (imgEl.nextElementSibling) {
-      imgEl.nextElementSibling.style.display = 'block';
-    }
-  }
-}
-
 function getCleanDomain(url) {
-  try {
-    return new URL(normalizeUrl(url)).hostname.replace(/^www\./, '');
-  } catch {
-    return url;
-  }
+  try { return new URL(normalizeUrl(url)).hostname.replace(/^www\./, ''); }
+  catch { return url; }
+}
+
+function openLinkConfirm(id) {
+  const item = allLinks.find(link => String(link.id) === String(id));
+  if (!item) return;
+  pendingOpenUrl = normalizeUrl(item.url);
+  document.getElementById('openLinkTitle').textContent = item.title || 'Project';
+  document.getElementById('openLinkDescription').textContent = item.description || 'Anda akan membuka tautan eksternal.';
+  document.getElementById('openLinkDomain').textContent = getCleanDomain(pendingOpenUrl);
+  openModal('openLinkModal');
+}
+
+function confirmOpenLink() {
+  if (!pendingOpenUrl) return;
+  const url = pendingOpenUrl;
+  pendingOpenUrl = '';
+  closeModal('openLinkModal');
+  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 // --- CATEGORY FILTER BAR ---
@@ -142,31 +119,17 @@ function renderCategoryFilter() {
   const visibleLinks = adminPass ? allLinks : allLinks.filter(l => !l.hidden);
   const usedCats = new Set(visibleLinks.map(l => l.category).filter(Boolean));
   const catNames = allCategories.map(c => c.name).filter(name => adminPass || usedCats.has(name));
-
-  if (catNames.length === 0) {
+  const pills = ['ALL', 'FAVORITES', ...catNames];
+  if (pills.length <= 2 && !visibleLinks.some(l => l.favorite)) {
     bar.classList.add('hidden');
-    selectedCategory = 'ALL';
+    selectedCategory = selectedCategory === 'FAVORITES' ? 'ALL' : selectedCategory;
     return;
   }
-
   bar.classList.remove('hidden');
-  const pills = ['ALL', ...catNames];
-
   bar.innerHTML = pills.map(cat => {
     const isActive = selectedCategory === cat;
-    const label = cat === 'ALL' ? 'Semua' : escapeHtml(cat);
-    return `
-      <button
-        onclick="selectCategory('${escapeHtml(cat)}')"
-        class="px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${
-          isActive 
-            ? 'bg-emerald-500 text-zinc-950 font-semibold shadow-sm shadow-emerald-500/20' 
-            : 'bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80'
-        }"
-      >
-        ${label}
-      </button>
-    `;
+    const label = cat === 'ALL' ? 'Semua' : cat === 'FAVORITES' ? '★ Favorit' : escapeHtml(cat);
+    return `<button onclick="selectCategory('${escapeHtml(cat)}')" class="px-3.5 py-1.5 rounded-full text-xs font-medium whitespace-nowrap transition-all ${isActive ? 'bg-emerald-500 text-zinc-950 font-semibold shadow-sm shadow-emerald-500/20' : 'bg-zinc-900/80 text-zinc-400 hover:text-zinc-200 border border-zinc-800/80'}">${label}</button>`;
   }).join('');
 }
 
@@ -190,7 +153,8 @@ function applyFiltersAndRender() {
 
   const filtered = allLinks.filter(item => {
     if (!adminPass && item.hidden) return false;
-    if (selectedCategory !== 'ALL' && item.category !== selectedCategory) return false;
+    if (selectedCategory === 'FAVORITES' && !item.favorite) return false;
+    if (selectedCategory !== 'ALL' && selectedCategory !== 'FAVORITES' && item.category !== selectedCategory) return false;
 
     if (q) {
       const matchTitle = item.title.toLowerCase().includes(q);
@@ -211,120 +175,80 @@ function renderLinks(links) {
   const container = document.getElementById('linksList');
   const countEl = document.getElementById('projectCount');
   countEl.textContent = `${links.length} project`;
-
   if (links.length === 0) {
-    container.innerHTML = `
-      <div class="text-center py-14 px-4 rounded-2xl bg-zinc-900/30 border border-dashed border-zinc-800/80">
-        <p class="text-zinc-400 text-sm font-medium">Tidak ada project yang ditampilkan.</p>
-        <p class="text-zinc-600 text-xs mt-1">${adminPass ? 'Klik "+ Tambah" di kanan atas untuk menambah link baru.' : 'Login sebagai admin untuk mengelola daftar link.'}</p>
-      </div>
-    `;
+    container.innerHTML = `<div class="text-center py-14 px-4 rounded-2xl bg-zinc-900/30 border border-dashed border-zinc-800/80"><p class="text-zinc-400 text-sm font-medium">Tidak ada project yang ditampilkan.</p><p class="text-zinc-600 text-xs mt-1">${selectedCategory === 'FAVORITES' ? 'Belum ada project favorit.' : adminPass ? 'Klik "+ Tambah" di kanan atas untuk menambah link baru.' : 'Login sebagai admin untuk mengelola daftar link.'}</p></div>`;
     return;
   }
-
   container.innerHTML = links.map((item, idx) => {
-    const fullUrl = normalizeUrl(item.url);
-    const icons = getFaviconSources(fullUrl);
-    const domain = getCleanDomain(fullUrl);
+    const domain = getCleanDomain(item.url);
     const delay = Math.min(idx * 40, 400);
-    const isHidden = item.hidden;
-
+    const isHidden = !!item.hidden;
+    const isFavorite = item.favorite === true || item.favorite === 'true' || item.favorite === 1;
+    const globalIndex = allLinks.findIndex(x => String(x.id) === String(item.id));
     const adminButtons = adminPass ? `
-      <div class="flex items-center gap-0.5 sm:gap-1 pl-2 border-l border-zinc-800/80 shrink-0" onclick="event.stopPropagation()">
-        <button 
-          onclick="toggleHideLink('${item.id}')" 
-          title="${isHidden ? 'Tampilkan (Unhide)' : 'Sembunyikan (Hide)'}"
-          class="p-1.5 sm:p-2 rounded-lg transition-colors ${isHidden ? 'text-amber-400 bg-amber-500/10 hover:bg-amber-500/20' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'}"
-        >
-          ${isHidden ? `
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21"/></svg>
-          ` : `
-            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z"/></svg>
-          `}
-        </button>
-        <button 
-          onclick="openEditModal('${item.id}')" 
-          title="Edit"
-          class="p-1.5 sm:p-2 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80 transition-colors"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
-        </button>
-        <button 
-          onclick="deleteLink('${item.id}', '${escapeHtml(item.title)}')" 
-          title="Hapus"
-          class="p-1.5 sm:p-2 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800/80 transition-colors"
-        >
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-        </button>
-      </div>
-    ` : '';
-
-    return `
-      <div 
-        onclick="window.open('${escapeHtml(fullUrl)}', '_blank', 'noopener,noreferrer')"
-        style="animation-delay: ${delay}ms"
-        class="animate-row group relative flex items-center gap-3.5 sm:gap-4 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/40 ${
-          isHidden 
-            ? 'bg-zinc-950/50 border-dashed border-zinc-800/70 opacity-60 hover:opacity-95' 
-            : 'bg-zinc-900/60 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700'
-        }"
-      >
-        <!-- Favicon -->
-        <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-zinc-950 border border-zinc-800/90 flex items-center justify-center shrink-0 overflow-hidden group-hover:border-emerald-500/40 transition-colors">
-          <img 
-            src="${icons.directPng}" 
-            alt="${escapeHtml(item.title)}" 
-            class="w-5 h-5 sm:w-6 sm:h-6 object-contain"
-            onerror="handleFaviconError(this, '${icons.subPng}', '${icons.directIco}', '${icons.google}')"
-          />
-          <svg class="w-5 h-5 text-zinc-500 hidden" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/>
-          </svg>
-        </div>
-
-        <!-- Title, Badges & Description -->
-        <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2 flex-wrap">
-            <h3 class="font-semibold text-sm sm:text-base text-zinc-100 group-hover:text-emerald-400 transition-colors truncate">
-              ${escapeHtml(item.title)}
-            </h3>
-            ${item.category ? `
-              <span class="text-[10px] font-medium text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">
-                ${escapeHtml(item.category)}
-              </span>
-            ` : ''}
-            ${isHidden ? `
-              <span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">
-                Hidden
-              </span>
-            ` : ''}
-            <span class="hidden md:inline-block text-[11px] font-mono text-zinc-500 bg-zinc-950/80 px-2 py-0.5 rounded-md border border-zinc-800/70 truncate max-w-[180px]">
-              ${escapeHtml(domain)}
-            </span>
-          </div>
-          ${item.description ? `
-            <p class="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">
-              ${escapeHtml(item.description)}
-            </p>
-          ` : `
-            <p class="text-xs text-zinc-500 font-mono truncate mt-0.5 md:hidden">
-              ${escapeHtml(domain)}
-            </p>
-          `}
-        </div>
-
-        <!-- External Arrow -->
-        <div class="text-zinc-600 group-hover:text-emerald-400 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-all shrink-0">
-          <svg class="w-4 h-4 sm:w-5 sm:h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M17 7H7M17 7v10"/>
-          </svg>
-        </div>
-
-        <!-- Admin Controls -->
-        ${adminButtons}
-      </div>
-    `;
+      <div class="flex items-center gap-0.5 pl-2 border-l border-zinc-800/80 shrink-0" onclick="event.stopPropagation()">
+        <button onclick="moveLink('${item.id}', -1)" title="Pindah ke atas" ${globalIndex <= 0 ? 'disabled' : ''} class="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-25 disabled:cursor-not-allowed"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 15 6-6 6 6"/></svg></button>
+        <button onclick="moveLink('${item.id}', 1)" title="Pindah ke bawah" ${globalIndex >= allLinks.length - 1 ? 'disabled' : ''} class="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-800 disabled:opacity-25 disabled:cursor-not-allowed"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg></button>
+        <button onclick="toggleFavorite('${item.id}')" title="${isFavorite ? 'Hapus dari favorit' : 'Jadikan favorit'}" class="p-1.5 rounded-lg ${isFavorite ? 'text-amber-400' : 'text-zinc-500 hover:text-amber-300'} hover:bg-zinc-800"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="${isFavorite ? 'currentColor' : 'none'}" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 17.05l-5.5 2.89 1.05-6.13L3.1 9.47l6.15-.9L12 3z"/></svg></button>
+        <button onclick="toggleHideLink('${item.id}')" title="${isHidden ? 'Tampilkan' : 'Sembunyikan'}" class="p-1.5 rounded-lg ${isHidden ? 'text-amber-400 bg-amber-500/10' : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/80'}"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${isHidden ? 'M3 3l18 18M10.6 10.6a2 2 0 002.8 2.8M9.9 5.2A10.5 10.5 0 0112 5c4.5 0 8.3 2.9 9.5 7a10 10 0 01-2.1 3.7' : 'M2.5 12C3.7 8 7.5 5 12 5s8.3 3 9.5 7c-1.2 4-5 7-9.5 7s-8.3-3-9.5-7zm9.5-3a3 3 0 100 6 3 3 0 000-6z'}"/></svg></button>
+        <button onclick="openEditModal('${item.id}')" title="Edit" class="p-1.5 rounded-lg text-zinc-400 hover:text-sky-400 hover:bg-zinc-800/80"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.4-9.4a2 2 0 112.8 2.8L11.8 15H9v-2.8l8.6-8.6z"/></svg></button>
+        <button onclick="deleteLink('${item.id}', '${escapeHtml(item.title)}')" title="Hapus" class="p-1.5 rounded-lg text-zinc-400 hover:text-rose-400 hover:bg-zinc-800/80"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.9 12.1A2 2 0 0116.1 21H7.9a2 2 0 01-2-1.9L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg></button>
+      </div>` : `
+      <button onclick="event.stopPropagation();" class="p-1.5 rounded-lg ${isFavorite ? 'text-amber-400' : 'text-zinc-600'}" aria-label="${isFavorite ? 'Favorit' : ''}" tabindex="-1"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="${isFavorite ? 'currentColor' : 'none'}" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="m12 3 2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 17.05l-5.5 2.89 1.05-6.13L3.1 9.47l6.15-.9L12 3z"/></svg></button>`;
+    return `<div onclick="openLinkConfirm('${item.id}')" style="animation-delay:${delay}ms" class="animate-row group relative flex items-center gap-3 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/40 ${isHidden ? 'bg-zinc-950/50 border-dashed border-zinc-800/70 opacity-60 hover:opacity-95' : 'bg-zinc-900/60 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700'}">
+      <div class="w-10 h-10 sm:w-11 sm:h-11 rounded-xl bg-zinc-950 border border-zinc-800/90 flex items-center justify-center shrink-0 text-emerald-400 font-mono font-bold text-sm">${escapeHtml((item.title || 'P').slice(0,1).toUpperCase())}</div>
+      <div class="flex-1 min-w-0"><div class="flex items-center gap-2 flex-wrap"><h3 class="font-semibold text-sm sm:text-base text-zinc-100 group-hover:text-emerald-400 transition-colors truncate">${escapeHtml(item.title)}</h3>${item.category ? `<span class="text-[10px] font-medium text-emerald-300/90 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full">${escapeHtml(item.category)}</span>` : ''}${isHidden ? '<span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Hidden</span>' : ''}<span class="hidden md:inline-block text-[11px] font-mono text-zinc-500 bg-zinc-950/80 px-2 py-0.5 rounded-md border border-zinc-800/70 truncate max-w-[180px]">${escapeHtml(domain)}</span></div>${item.description ? `<p class="text-xs sm:text-sm text-zinc-400 truncate mt-0.5">${escapeHtml(item.description)}</p>` : `<p class="text-xs text-zinc-500 font-mono truncate mt-0.5 md:hidden">${escapeHtml(domain)}</p>`}</div>
+      <div class="text-zinc-600 group-hover:text-emerald-400 shrink-0"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>${adminButtons}
+    </div>`;
   }).join('');
+}
+
+// --- FAVORITE & CUSTOM ORDER ---
+async function toggleFavorite(id) {
+  const item = allLinks.find(x => String(x.id) === String(id));
+  if (!item || !adminPass) return;
+  const previous = !!item.favorite;
+  item.favorite = !previous;
+  renderCategoryFilter(); applyFiltersAndRender();
+  try {
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'toggle_favorite', password:adminPass, id, favorite:item.favorite})});
+    const json = await res.json();
+    if (json.status !== 'success') throw new Error(json.message || 'Backend belum mendukung favorit');
+    showToast(item.favorite ? 'Ditambahkan ke favorit' : 'Dihapus dari favorit', 'success');
+  } catch (err) {
+    item.favorite = previous; renderCategoryFilter(); applyFiltersAndRender();
+    showToast(err.message || 'Gagal menyimpan favorit', 'error');
+  }
+}
+
+async function moveLink(id, direction) {
+  if (!adminPass) return;
+  const from = allLinks.findIndex(x => String(x.id) === String(id));
+  const to = from + direction;
+  if (from < 0 || to < 0 || to >= allLinks.length) return;
+  [allLinks[from], allLinks[to]] = [allLinks[to], allLinks[from]];
+  applyFiltersAndRender();
+  try {
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'reorder_links', password:adminPass, ids:allLinks.map(x => x.id)})});
+    const json = await res.json();
+    if (json.status !== 'success') throw new Error(json.message || 'Backend belum mendukung urutan link');
+    await fetchData(); showToast('Urutan project disimpan', 'success');
+  } catch (err) { await fetchData(); showToast(err.message || 'Gagal menyimpan urutan', 'error'); }
+}
+
+async function moveCategory(id, direction) {
+  if (!adminPass) return;
+  const from = allCategories.findIndex(x => String(x.id) === String(id));
+  const to = from + direction;
+  if (from < 0 || to < 0 || to >= allCategories.length) return;
+  [allCategories[from], allCategories[to]] = [allCategories[to], allCategories[from]];
+  renderCategoryManagerList(); renderCategoryFilter();
+  try {
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body:JSON.stringify({action:'reorder_categories', password:adminPass, ids:allCategories.map(x => x.id)})});
+    const json = await res.json();
+    if (json.status !== 'success') throw new Error(json.message || 'Backend belum mendukung urutan kategori');
+    await fetchData(); renderCategoryManagerList(); showToast('Urutan kategori disimpan', 'success');
+  } catch (err) { await fetchData(); renderCategoryManagerList(); showToast(err.message || 'Gagal menyimpan urutan kategori', 'error'); }
 }
 
 // --- LOGIN ---
@@ -501,6 +425,8 @@ function renderCategoryManagerList() {
     <div class="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-zinc-950 border border-zinc-800/80">
       <span class="text-sm text-zinc-200 truncate pl-1">${escapeHtml(cat.name)}</span>
       <div class="flex items-center gap-1 shrink-0">
+        <button onclick="moveCategory('${cat.id}', -1)" title="Pindah kiri/atas" ${allCategories.indexOf(cat) === 0 ? 'disabled' : ''} class="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-900 disabled:opacity-25"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 15 6-6 6 6"/></svg></button>
+        <button onclick="moveCategory('${cat.id}', 1)" title="Pindah kanan/bawah" ${allCategories.indexOf(cat) === allCategories.length - 1 ? 'disabled' : ''} class="p-1.5 rounded-lg text-zinc-500 hover:text-white hover:bg-zinc-900 disabled:opacity-25"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m6 9 6 6 6-6"/></svg></button>
         <button 
           onclick="renameCategory('${cat.id}', '${escapeHtml(cat.name)}')" 
           title="Rename"
@@ -627,7 +553,7 @@ function closeModal(id) {
   }, 220);
 }
 
-['loginModal', 'linkModal', 'categoryModal'].forEach(id => {
+['loginModal', 'linkModal', 'categoryModal', 'openLinkModal'].forEach(id => {
   document.getElementById(id).addEventListener('click', (e) => {
     if (e.target.id === id) closeModal(id);
   });
