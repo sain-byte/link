@@ -115,6 +115,27 @@
     .admin-menu-panel { animation: fadeSlideUp 0.16s cubic-bezier(0.16,1,0.3,1) forwards; }
     #toastProgress { transition: width 3s linear; }
     :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+    /* EMOTE GERAK-GERAK */
+    @keyframes emoteBounce { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-6px);} }
+    @keyframes emoteWiggle { 0%,100%{ transform:rotate(-9deg);} 50%{ transform:rotate(9deg);} }
+    @keyframes emoteHeartbeat { 0%,100%{ transform:scale(1);} 25%{ transform:scale(1.28);} 40%{ transform:scale(1.08);} }
+    @keyframes emoteFlicker { 0%,100%{ transform:scale(1) rotate(-2deg);} 50%{ transform:scale(1.16) rotate(2deg);} }
+    @keyframes emoteSparkle { 0%,100%{ transform:scale(1); opacity:1;} 50%{ transform:scale(1.3); opacity:.75;} }
+    @keyframes emoteFloat { 0%,100%{ transform:translateY(0);} 50%{ transform:translateY(-4px);} }
+    .emote-anim { display:inline-block; animation-duration:1.2s; animation-iteration-count:infinite; line-height:1; }
+    .emote-bounce { animation-name:emoteBounce; }
+    .emote-wiggle { animation-name:emoteWiggle; }
+    .emote-heartbeat { animation-name:emoteHeartbeat; animation-duration:.9s; }
+    .emote-flicker { animation-name:emoteFlicker; animation-duration:.8s; }
+    .emote-sparkle { animation-name:emoteSparkle; }
+    .emote-float { animation-name:emoteFloat; }
+    .emote-big { font-size:2.6rem; line-height:1.1; }
+    .emote-picker-btn { transition:transform .15s ease; }
+    .emote-picker-btn:hover { animation:emoteWiggle .45s ease-in-out infinite; transform:scale(1.15); }
+    .chat-scroll::-webkit-scrollbar { width:5px; }
+    .chat-bubble { word-break:break-word; }
+
   </style>
 </head>
 <body class="text-zinc-100 antialiased min-h-screen flex flex-col overflow-x-clip selection:bg-emerald-500/30 selection:text-emerald-200">
@@ -123,9 +144,13 @@
       <div class="max-w-3xl mx-auto px-4 sm:px-6 h-[64px] flex items-center justify-between gap-2">
         <a href="#" onclick="resetFilters(event)" class="leading-none shrink-0 group">
           <span class="block font-mono font-bold text-[19px] tracking-tight text-white">sainbyte</span>
-          <span class="block text-[10px] tracking-[0.16em] uppercase text-zinc-500 mt-1">dashboard list project</span>
+          <span class="block text-[10px] tracking-[0.16em] lowercase text-zinc-500 mt-1">dashboard list project</span>
         </a>
         <div class="flex items-center gap-1.5 sm:gap-2">
+          <button id="chatBtn" onclick="openChatModal()" title="Chatbox" aria-label="Buka chatbox" class="relative w-9 h-9 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition-colors active:scale-95">
+            <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 10h8M8 14h5M21 12a9 9 0 01-13.2 7.9L3 21l1.1-4.8A9 9 0 1121 12z"/></svg>
+            <span id="chatBadge" class="hidden absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 border-2 border-zinc-950"></span>
+          </button>
           <div class="relative">
             <button id="themeBtn" onclick="toggleThemeMenu(event)" title="Ganti tema warna" aria-label="Ganti tema warna" class="w-9 h-9 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition-colors active:scale-95">
               <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.7 0-.9-.7-1.6-1.6-1.6H11a2 2 0 01-2-2c0-1.1.9-2 2-2h.5A5.5 5.5 0 0017 8.5c0-3-2.2-5.5-5-5.5z"/><circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="16" cy="11" r="1.2" fill="currentColor" stroke="none"/></svg>
@@ -163,7 +188,10 @@
         <div id="initialLoading" class="flex items-center justify-center gap-2.5 py-14 text-zinc-500 text-sm"><span class="w-4 h-4 rounded-full border-2 border-zinc-700 border-t-emerald-400 animate-spin shrink-0"></span><span>Memuat data...</span></div>
       </div>
     </main>
-    <footer class="max-w-3xl w-full mx-auto px-4 sm:px-6 py-6 text-center text-xs text-zinc-600 font-mono">&copy; <span id="year"></span> sainbyte</footer>
+    <footer class="max-w-3xl w-full mx-auto px-4 sm:px-6 py-6 text-center text-xs text-zinc-600 font-mono">
+      <div>&copy; <span id="year"></span> sainbyte</div>
+      <div id="visitCount" class="mt-1.5 text-zinc-500">👁 Memuat kunjungan...</div>
+    </footer>
   </div>
   <div id="loginModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
     <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 sm:p-6 shadow-2xl modal-card scale-95 opacity-0 max-h-[92dvh] overflow-y-auto">
@@ -201,6 +229,39 @@
   <div id="renameCategoryModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
     <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 sm:p-6 shadow-2xl modal-card scale-95 opacity-0"><div class="flex items-center justify-between mb-4"><h2 class="text-base font-semibold text-white">Ubah Nama Kategori</h2><button onclick="closeModal('renameCategoryModal')" class="text-zinc-500 hover:text-zinc-300 p-1" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div><form id="renameCategoryForm" class="space-y-4"><input type="hidden" id="renameCategoryId" /><input type="text" id="renameCategoryInput" required placeholder="Nama kategori" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" /><div class="flex justify-end gap-2"><button type="button" onclick="closeModal('renameCategoryModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800">Batal</button><button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950">Simpan</button></div></form></div>
   </div>
+
+  <div id="chatModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md shadow-2xl modal-card scale-95 opacity-0 flex flex-col max-h-[86dvh] overflow-hidden">
+      <div class="flex items-center justify-between px-5 pt-4 pb-3 border-b border-zinc-800/80 shrink-0">
+        <div>
+          <h2 class="text-base font-semibold text-white leading-tight">Chatbox</h2>
+          <p id="chatCountLabel" class="text-[11px] text-zinc-500 mt-0.5">0 komentar • global</p>
+        </div>
+        <button onclick="closeModal('chatModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button>
+      </div>
+      <div id="chatList" class="flex-1 overflow-y-auto px-4 py-3 space-y-3 chat-scroll min-h-[280px]"></div>
+      <div class="shrink-0 border-t border-zinc-800/80 p-3">
+        <div id="emotePicker" class="hidden mb-2.5 rounded-xl bg-zinc-950 border border-zinc-800 p-2">
+          <p class="text-[10px] tracking-[0.14em] uppercase text-zinc-500 px-1 pb-1.5">Emote lucu — tap buat masukin</p>
+          <div id="emoteGrid" class="grid grid-cols-8 gap-1"></div>
+          <div class="flex flex-wrap gap-1.5 mt-2 pt-2 border-t border-zinc-800/80">
+            <button onclick="insertKaomoji('(˶ᵔᵕᵔ˶)')" class="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-[11px] text-zinc-300">(˶ᵔᵕᵔ˶)</button>
+            <button onclick="insertKaomoji('(｡♥‿♥｡)')" class="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-[11px] text-zinc-300">(｡♥‿♥｡)</button>
+            <button onclick="insertKaomoji('(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧')" class="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-[11px] text-zinc-300">(ﾉ◕ヮ◕)ﾉ*:･ﾟ✧</button>
+            <button onclick="insertKaomoji('(´꒳`)♡')" class="px-2 py-1 rounded-lg bg-zinc-900 hover:bg-zinc-800 text-[11px] text-zinc-300">(´꒳`)♡</button>
+          </div>
+        </div>
+        <input type="text" id="chatNameInput" maxlength="20" placeholder="Nama bebas (kosong = Tamu 🐰)" class="w-full mb-2 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-[13px] text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" />
+        <form id="chatForm" class="flex items-end gap-2">
+          <button type="button" onclick="toggleEmotePicker(event)" title="Emote" aria-label="Buka emote" class="shrink-0 w-10 h-10 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-200 flex items-center justify-center text-[19px] active:scale-95">😀</button>
+          <textarea id="chatMessageInput" rows="1" maxlength="200" placeholder="Tulis komentar..." class="flex-1 resize-none bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 max-h-24"></textarea>
+          <button type="submit" id="chatSendBtn" class="shrink-0 w-10 h-10 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-zinc-950 flex items-center justify-center active:scale-95"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19V5m0 0l-6 6m6-6l6 6"/></svg></button>
+        </form>
+        <p class="text-[10px] text-zinc-600 px-1 pt-1.5">Max 200 karakter • Tanpa filter kata • Admin bisa hapus</p>
+      </div>
+    </div>
+  </div>
+
   <div id="toast" class="fixed bottom-5 left-4 right-4 mx-auto sm:left-auto sm:right-5 sm:mx-0 z-[60] translate-y-20 opacity-0 transition-all duration-300 pointer-events-none max-w-sm sm:w-auto">
     <div class="relative overflow-hidden px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 shadow-xl flex items-center gap-2.5 pointer-events-auto"><span id="toastIcon" class="shrink-0"></span><span id="toastMessage" class="flex-1 min-w-0"></span><button onclick="hideToast()" class="text-zinc-500 hover:text-zinc-200 shrink-0 p-0.5" aria-label="Tutup notifikasi"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button><div id="toastProgress" class="absolute bottom-0 left-0 h-[2px] bg-emerald-400 w-full"></div></div>
   </div>

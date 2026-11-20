@@ -12,6 +12,12 @@ let searchTimer = null;
 let toastTimer = null;
 let openModalCount = 0;
 let deferredPrompt = null;
+let allComments = [];
+let chatPollTimer = null;
+let chatOpen = false;
+let likedCommentIds = new Set(JSON.parse(localStorage.getItem('sainbyte_liked_comments') || '[]'));
+let lastSeenCommentId = localStorage.getItem('sainbyte_last_seen_comment') || '';
+let visitData = {total: 0, today: 0};
 let draggedLinkId = null;
 let draggedCatId = null;
 document.getElementById('year').textContent = new Date().getFullYear();
@@ -47,11 +53,19 @@ document.addEventListener('DOMContentLoaded', ()=>{
   renderAuthControls(); fetchData();
   const si=document.getElementById('searchInput');
   if(si) si.addEventListener('input', ()=>{ clearTimeout(searchTimer); searchTimer=setTimeout(()=>applyFiltersAndRender(),120); });
+  const chatForm = document.getElementById('chatForm');
+  if (chatForm) chatForm.addEventListener('submit', sendChat);
+  const chatMsg = document.getElementById('chatMessageInput');
+  if (chatMsg) {
+    chatMsg.addEventListener('keydown', (e)=>{ if (e.key==='Enter' && !e.shiftKey) { e.preventDefault(); sendChat(); } });
+    chatMsg.addEventListener('input', ()=>{ chatMsg.style.height='auto'; chatMsg.style.height=Math.min(chatMsg.scrollHeight, 96)+'px'; });
+  }
+  document.addEventListener('click', (e)=>{ if (!e.target.closest('#emotePicker') && !e.target.closest('button[onclick*="toggleEmotePicker"]')) { const p=document.getElementById('emotePicker'); if(p) p.classList.add('hidden'); } });
   document.addEventListener('keydown', (e)=>{
-    if(e.key==='Escape'){ ['loginModal','linkModal','categoryModal','openLinkModal','deleteLinkModal','deleteCategoryModal','renameCategoryModal'].forEach(id=>{ const m=document.getElementById(id); if(m && !m.classList.contains('hidden')) closeModal(id); }); closeAllAdminMenus(); closeThemeMenu(); }
+    if(e.key==='Escape'){ ['loginModal','linkModal','categoryModal','openLinkModal','deleteLinkModal','deleteCategoryModal','renameCategoryModal','chatModal'].forEach(id=>{ const m=document.getElementById(id); if(m && !m.classList.contains('hidden')) closeModal(id); }); closeAllAdminMenus(); closeThemeMenu(); }
   });
   document.addEventListener('click', (e)=>{ if(!e.target.closest('.admin-menu-wrap')) closeAllAdminMenus(); if(!e.target.closest('#themeMenu') && !e.target.closest('#themeBtn')) closeThemeMenu(); });
-  ['loginModal','linkModal','categoryModal','openLinkModal','deleteLinkModal','deleteCategoryModal','renameCategoryModal'].forEach(id=>{ const m=document.getElementById(id); if(m) m.addEventListener('click',(e)=>{ if(e.target.id===id) closeModal(id); }); });
+  ['loginModal','linkModal','categoryModal','openLinkModal','deleteLinkModal','deleteCategoryModal','renameCategoryModal','chatModal'].forEach(id=>{ const m=document.getElementById(id); if(m) m.addEventListener('click',(e)=>{ if(e.target.id===id) closeModal(id); }); });
 });
 function renderAuthControls(){
   const c=document.getElementById('authControls');
@@ -65,7 +79,200 @@ function renderAuthControls(){
   }
 }
 function logout(){ adminPass=null; localStorage.removeItem('sainbyte_admin_pass'); renderAuthControls(); renderCategoryFilter(); applyFiltersAndRender(); showToast('Berhasil logout','info'); }
-async function fetchData(options={}){ const keepList=!!options.keepList; try{ const res=await fetch(API_URL); const json=await res.json(); if(json.status==='success'){ allLinks=json.data.links||[]; allCategories=json.data.categories||[]; renderCategoryFilter(); applyFiltersAndRender(); } else showToast(json.message||'Gagal memuat data','error'); }catch(err){ if(!keepList && allLinks.length===0){ const el=document.getElementById('initialLoading'); if(el) el.innerHTML=`<span class="text-sm text-zinc-500">Gagal terhubung ke server. Periksa koneksi atau deployment GAS.</span>`; } else showToast('Gagal terhubung ke server','error'); } }
+
+// --- CHATBOX GLOBAL + EMOTE GERAK + VISIT COUNTER ---
+const EMOTE_LIST = ['🥺','😍','🤭','😋','🫣','👀','✨','💖','🫶','🐱','🐶','🐰','🐻','🐼','🦊','🐥','🐣','🔥','👍','👏','😂','😮','😢','🙏','🎉','❤️'];
+const CUTE_ANIMALS = ['🐰','🐱','🐶','🐻','🐼','🦊','🐥'];
+function getEmoteAnimClass(emoji){
+  if (['❤️','💖','🫶'].includes(emoji)) return 'emote-heartbeat';
+  if (['🔥'].includes(emoji)) return 'emote-flicker';
+  if (['✨','🎉'].includes(emoji)) return 'emote-sparkle';
+  if (['🐱','🐶','🐰','🐻','🐼','🦊','🐥','🐣'].includes(emoji)) return 'emote-bounce';
+  if (['🥺','😍','🤭'].includes(emoji)) return 'emote-wiggle';
+  return 'emote-float';
+}
+function isOnlyEmotes(text){
+  const t = (text||'').trim();
+  if (!t) return false;
+  const noSpace = t.replace(/\s+/g, '');
+  // hitung: hapus semua emoji + kaomoji, sisa harus kosong dan panjang emote <= 3
+  const emojiRegex = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]/gu;
+  const emojis = noSpace.match(emojiRegex) || [];
+  const withoutEmoji = noSpace.replace(emojiRegex, '').replace(/[()♥‿*･ﾟ✧꒳ᵔᵕ˶｡ﾉ◕ヮ´`]/g, '').trim();
+  return emojis.length >= 1 && emojis.length <= 3 && withoutEmoji === '' && noSpace.length <= 12;
+}
+function renderMessageContent(msg){
+  const esc = escapeHtml(msg);
+  if (isOnlyEmotes(msg)) {
+    // stiker gede + gerak
+    const chars = Array.from(msg.trim());
+    // pisah per emoji (sederhana: tiap karakter emoji)
+    const emojiRegex = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
+    let out = '';
+    for (const ch of chars) {
+      if (emojiRegex.test(ch)) out += `<span class="emote-anim ${getEmoteAnimClass(ch)} emote-big">${ch}</span> `;
+      else if (ch.trim()) out += escapeHtml(ch);
+    }
+    if (out.trim()) return `<div>${out}</div>`;
+  }
+  // teks biasa: emote di dalam teks tetep gerak kecil
+  return esc.replace(/([\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]\uFE0F?)/gu, (m) => `<span class="emote-anim ${getEmoteAnimClass(m)}">${m}</span>`);
+}
+function formatRelativeTime(createdAt){
+  if (!createdAt) return '';
+  const parts = String(createdAt).split(' ');
+  if (parts.length < 2) return createdAt;
+  const d = parts[0].split('-'); const t = parts[1].split(':');
+  const date = new Date(Number(d[0]), Number(d[1])-1, Number(d[2]), Number(t[0]), Number(t[1]), Number(t[2]||0));
+  const diff = Date.now() - date.getTime();
+  if (diff < 0) return 'baru saja';
+  const mins = Math.floor(diff/60000);
+  if (mins < 1) return 'baru saja';
+  if (mins < 60) return mins + ' menit lalu';
+  const hours = Math.floor(mins/60);
+  if (hours < 24) return hours + ' jam lalu';
+  const days = Math.floor(hours/24);
+  if (days < 7) return days + ' hari lalu';
+  return createdAt;
+}
+function avatarColor(name){
+  const colors = ['bg-rose-500/20 text-rose-300 border-rose-500/30','bg-sky-500/20 text-sky-300 border-sky-500/30','bg-amber-500/20 text-amber-300 border-amber-500/30','bg-violet-500/20 text-violet-300 border-violet-500/30','bg-emerald-500/20 text-emerald-300 border-emerald-500/30','bg-orange-500/20 text-orange-300 border-orange-500/30'];
+  let h = 0; for (const c of String(name||'')) h = (h*31 + c.charCodeAt(0)) % 1000;
+  return colors[h % colors.length];
+}
+function renderChat(){
+  const list = document.getElementById('chatList');
+  const label = document.getElementById('chatCountLabel');
+  if (!list) return;
+  if (label) label.textContent = allComments.length + ' komentar • global';
+  if (allComments.length === 0) {
+    list.innerHTML = `<div class="text-center py-10 px-4"><p class="text-[34px] mb-2"><span class="emote-anim emote-bounce">🐰</span></p><p class="text-sm text-zinc-400 font-medium">Belum ada komentar</p><p class="text-xs text-zinc-600 mt-1">Jadi yang pertama yuk (˶ᵔᵕᵔ˶)</p></div>`;
+    return;
+  }
+  list.innerHTML = allComments.map(c => {
+    const initial = (c.name||'T').trim().charAt(0).toUpperCase() || 'T';
+    const liked = likedCommentIds.has(String(c.id));
+    const delBtn = adminPass ? `<button onclick="deleteComment('${c.id}')" title="Hapus komentar" class="text-[11px] text-zinc-600 hover:text-rose-400 px-1">Hapus</button>` : '';
+    return `<div class="flex gap-2.5"><div class="w-8 h-8 rounded-full border flex items-center justify-center text-[13px] font-bold shrink-0 ${avatarColor(c.name)}">${escapeHtml(initial)}</div><div class="flex-1 min-w-0"><div class="flex items-baseline gap-2 flex-wrap"><span class="text-[13px] font-semibold text-zinc-100 truncate">${escapeHtml(c.name)}</span><span class="text-[10px] text-zinc-500">${escapeHtml(formatRelativeTime(c.createdAt))}</span></div><div class="chat-bubble mt-1 inline-block max-w-full px-3 py-2 rounded-2xl rounded-tl-md bg-zinc-800/80 border border-zinc-700/60 text-[13px] text-zinc-100 leading-relaxed">${renderMessageContent(c.message)}</div><div class="flex items-center gap-2 mt-1"><button onclick="toggleCommentLike('${c.id}')" class="flex items-center gap-1 text-[11px] ${liked ? 'text-rose-400' : 'text-zinc-500 hover:text-rose-300'}"><span class="emote-anim ${liked ? 'emote-heartbeat' : ''}">❤️</span> ${c.likes||0}</button>${delBtn}</div></div></div>`;
+  }).join('');
+  list.scrollTop = list.scrollHeight;
+}
+function updateChatBadge(){
+  const badge = document.getElementById('chatBadge');
+  if (!badge) return;
+  if (allComments.length === 0) { badge.classList.add('hidden'); return; }
+  const latestId = String(allComments[allComments.length-1].id);
+  if (!chatOpen && lastSeenCommentId && latestId !== lastSeenCommentId) badge.classList.remove('hidden');
+  else if (!chatOpen && !lastSeenCommentId) badge.classList.remove('hidden');
+  else badge.classList.add('hidden');
+}
+function openChatModal(){
+  chatOpen = true;
+  const badge = document.getElementById('chatBadge'); if (badge) badge.classList.add('hidden');
+  if (allComments.length) { lastSeenCommentId = String(allComments[allComments.length-1].id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(e){} }
+  openModal('chatModal');
+  renderChat();
+  startChatPolling();
+  setTimeout(()=>{ const inp = document.getElementById('chatMessageInput'); if (inp) inp.focus(); }, 250);
+}
+function startChatPolling(){
+  stopChatPolling();
+  chatPollTimer = setInterval(()=>{ if (chatOpen) fetchCommentsOnly(); }, 20000);
+}
+function stopChatPolling(){ if (chatPollTimer) clearInterval(chatPollTimer); chatPollTimer = null; }
+async function fetchCommentsOnly(){
+  try{
+    const res = await fetch(API_URL); const json = await res.json();
+    if (json.status === 'success' && json.data) {
+      if (Array.isArray(json.data.comments)) { allComments = json.data.comments; renderChat(); updateChatBadge(); }
+      if (json.data.visits) { visitData = json.data.visits; renderVisitCount(); }
+    }
+  }catch(e){}
+}
+function renderVisitCount(){
+  const el = document.getElementById('visitCount');
+  if (!el) return;
+  const fmt = (n) => Number(n||0).toLocaleString('id-ID');
+  el.textContent = `👁 ${fmt(visitData.total)} kunjungan • ${fmt(visitData.today)} hari ini`;
+}
+async function trackVisit(){
+  try{
+    const last = Number(localStorage.getItem('sainbyte_last_visit') || 0);
+    if (Date.now() - last < 30*60*1000) return; // 1 device per 30 menit
+    localStorage.setItem('sainbyte_last_visit', String(Date.now()));
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'add_visit'})});
+    const json = await res.json();
+    if (json.status === 'success' && json.visits) { visitData = json.visits; renderVisitCount(); }
+  }catch(e){}
+}
+function toggleEmotePicker(e){ if(e) e.stopPropagation(); const p = document.getElementById('emotePicker'); if(!p) return; const willShow = p.classList.contains('hidden'); document.getElementById('emotePicker').classList.toggle('hidden'); if (willShow) renderEmoteGrid(); }
+function renderEmoteGrid(){
+  const grid = document.getElementById('emoteGrid'); if (!grid || grid.dataset.done) return; grid.dataset.done = '1';
+  grid.innerHTML = EMOTE_LIST.map(em => `<button type="button" onclick="insertEmote('${em}')" class="emote-picker-btn w-8 h-8 rounded-lg bg-zinc-900 hover:bg-zinc-800 flex items-center justify-center text-[17px]">${em}</button>`).join('');
+}
+function insertEmote(em){
+  const inp = document.getElementById('chatMessageInput'); if (!inp) return;
+  const start = inp.selectionStart || inp.value.length; const end = inp.selectionEnd || inp.value.length;
+  inp.value = inp.value.slice(0, start) + em + inp.value.slice(end);
+  inp.focus(); inp.selectionStart = inp.selectionEnd = start + em.length;
+}
+function insertKaomoji(txt){
+  const inp = document.getElementById('chatMessageInput'); if (!inp) return;
+  const start = inp.selectionStart || inp.value.length; const end = inp.selectionEnd || inp.value.length;
+  inp.value = inp.value.slice(0, start) + ' ' + txt + ' ' + inp.value.slice(end);
+  inp.focus();
+}
+async function sendChat(e){
+  if (e) e.preventDefault();
+  const nameInput = document.getElementById('chatNameInput');
+  const msgInput = document.getElementById('chatMessageInput');
+  const btn = document.getElementById('chatSendBtn');
+  let name = (nameInput?.value || '').trim().slice(0,20);
+  if (!name) { const a = CUTE_ANIMALS[Math.floor(Math.random()*CUTE_ANIMALS.length)]; name = 'Tamu ' + a; }
+  const message = (msgInput?.value || '').trim();
+  if (!message) { showToast('Tulis komentar dulu','info'); return; }
+  if (message.length > 200) { showToast('Max 200 karakter','error'); return; }
+  if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
+  try{
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'add_comment', name, message})});
+    const json = await res.json();
+    if (json.status === 'success') {
+      if (msgInput) msgInput.value = '';
+      document.getElementById('emotePicker')?.classList.add('hidden');
+      if (json.comment) { allComments.push(json.comment); lastSeenCommentId = String(json.comment.id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(_){} }
+      renderChat();
+      // refresh dari server biar timestamp akurat
+      fetchCommentsOnly();
+    } else showToast(json.message || 'Gagal kirim komentar','error');
+  }catch(err){ showToast('Gagal terhubung ke server','error'); }
+  finally{ if (btn) { btn.disabled = false; btn.style.opacity = '1'; } }
+}
+async function toggleCommentLike(id){
+  const liked = likedCommentIds.has(String(id));
+  const delta = liked ? -1 : 1;
+  const c = allComments.find(x=>String(x.id)===String(id)); if (c) c.likes = Math.max(0, (c.likes||0)+delta);
+  if (liked) likedCommentIds.delete(String(id)); else likedCommentIds.add(String(id));
+  try{ localStorage.setItem('sainbyte_liked_comments', JSON.stringify(Array.from(likedCommentIds))); }catch(_){}
+  renderChat();
+  try{
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'toggle_comment_like', id, delta})});
+    const json = await res.json();
+    if (json.status === 'success' && c) { c.likes = json.likes; renderChat(); }
+  }catch(_){}
+}
+async function deleteComment(id){
+  if (!adminPass) return;
+  if (!confirm('Hapus komentar ini?')) return;
+  try{
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'delete_comment', password: adminPass, id})});
+    const json = await res.json();
+    if (json.status === 'success') { allComments = allComments.filter(x=>String(x.id)!==String(id)); renderChat(); showToast('Komentar dihapus','success'); }
+    else showToast(json.message||'Gagal hapus','error');
+  }catch(_){ showToast('Gagal terhubung ke server','error'); }
+}
+
+
+async function fetchData(options={}){ const keepList=!!options.keepList; try{ const res=await fetch(API_URL); const json=await res.json(); if(json.status==='success'){ allLinks=json.data.links||[]; allCategories=json.data.categories||[]; if(Array.isArray(json.data.comments)) allComments=json.data.comments; if(json.data.visits) { visitData=json.data.visits; renderVisitCount(); } renderCategoryFilter(); applyFiltersAndRender(); renderChat(); updateChatBadge(); trackVisit(); } else showToast(json.message||'Gagal memuat data','error'); }catch(err){ if(!keepList && allLinks.length===0){ const el=document.getElementById('initialLoading'); if(el) el.innerHTML=`<span class="text-sm text-zinc-500">Gagal terhubung ke server. Periksa koneksi atau deployment GAS.</span>`; } else showToast('Gagal terhubung ke server','error'); } }
 function normalizeUrl(u){ let v=(u||'').trim(); if(!v) return ''; if(!/^https?:\/\//i.test(v)) v='https://'+v; return v; }
 function getCleanDomain(url){ try{ return new URL(normalizeUrl(url)).hostname.replace(/^www\./,''); }catch{ return url; } }
 function openLinkConfirm(id){ const item=allLinks.find(l=>String(l.id)===String(id)); if(!item) return; pendingOpenUrl=normalizeUrl(item.url); document.getElementById('openLinkTitle').textContent=item.title||'Project'; document.getElementById('openLinkDescription').textContent=item.description||'Anda akan membuka tautan eksternal.'; document.getElementById('openLinkDomain').textContent=getCleanDomain(pendingOpenUrl); openModal('openLinkModal'); }
@@ -177,8 +384,10 @@ async function handleImportFile(e){
     await fetchData({keepList:true}); renderCategoryManagerList(); showToast(`Import selesai, ${added} project ditambahkan`,'success');
   }catch(err){ showToast(err.message||'Gagal import file','error'); }
 }
-function openModal(id){ const modal=document.getElementById(id); if(!modal) return; const card=modal.querySelector('.modal-card'); modal.classList.remove('hidden'); modal.classList.add('flex'); openModalCount++; document.body.style.overflow='hidden'; requestAnimationFrame(()=>{ modal.classList.remove('opacity-0'); if(card){ card.classList.remove('scale-95','opacity-0'); card.classList.add('scale-100','opacity-100'); } }); }
-function closeModal(id){ const modal=document.getElementById(id); if(!modal || modal.classList.contains('hidden')) return; const card=modal.querySelector('.modal-card'); modal.classList.add('opacity-0'); if(card){ card.classList.remove('scale-100','opacity-100'); card.classList.add('scale-95','opacity-0'); } openModalCount=Math.max(0,openModalCount-1); if(openModalCount===0) document.body.style.overflow=''; setTimeout(()=>{ modal.classList.add('hidden'); modal.classList.remove('flex'); },240); }
+function openModal(id){
+  if (id==='chatModal') { chatOpen=true; const b=document.getElementById('chatBadge'); if(b) b.classList.add('hidden'); } const modal=document.getElementById(id); if(!modal) return; const card=modal.querySelector('.modal-card'); modal.classList.remove('hidden'); modal.classList.add('flex'); openModalCount++; document.body.style.overflow='hidden'; requestAnimationFrame(()=>{ modal.classList.remove('opacity-0'); if(card){ card.classList.remove('scale-95','opacity-0'); card.classList.add('scale-100','opacity-100'); } }); }
+function closeModal(id){
+  if (id==='chatModal') { chatOpen=false; stopChatPolling(); if (allComments.length) { lastSeenCommentId=String(allComments[allComments.length-1].id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(e){} } } const modal=document.getElementById(id); if(!modal || modal.classList.contains('hidden')) return; const card=modal.querySelector('.modal-card'); modal.classList.add('opacity-0'); if(card){ card.classList.remove('scale-100','opacity-100'); card.classList.add('scale-95','opacity-0'); } openModalCount=Math.max(0,openModalCount-1); if(openModalCount===0) document.body.style.overflow=''; setTimeout(()=>{ modal.classList.add('hidden'); modal.classList.remove('flex'); },240); }
 function showToast(msg,type='info'){ const toast=document.getElementById('toast'); const icon=document.getElementById('toastIcon'); const message=document.getElementById('toastMessage'); const progress=document.getElementById('toastProgress'); const colors={success:'bg-emerald-400',error:'bg-rose-400',info:'bg-sky-400'}; icon.innerHTML=`<span class="w-2 h-2 rounded-full ${colors[type]||colors.info} block"></span>`; message.textContent=msg; toast.classList.remove('translate-y-20','opacity-0'); if(progress){ progress.style.transition='none'; progress.style.width='100%'; void progress.offsetWidth; progress.style.transition='width 3s linear'; progress.style.width='0%'; } clearTimeout(toastTimer); toastTimer=setTimeout(()=>hideToast(),3000); }
 function hideToast(){ const toast=document.getElementById('toast'); toast.classList.add('translate-y-20','opacity-0'); clearTimeout(toastTimer); }
 function escapeHtml(str){ if(!str) return ''; return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#039;'); }
