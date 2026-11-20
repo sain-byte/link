@@ -17,6 +17,13 @@ let chatPollTimer = null;
 let chatOpen = false;
 let likedCommentIds = new Set(JSON.parse(localStorage.getItem('sainbyte_liked_comments') || '[]'));
 let lastSeenCommentId = localStorage.getItem('sainbyte_last_seen_comment') || '';
+let pendingReply = null;
+let dividerBeforeId = '';
+let pressTimer = null;
+let touchStartX = 0;
+let touchStartY = 0;
+let longPressFired = false;
+let lastAnimatedLinkId = null;
 let visitData = {total: 0, today: 0};
 let draggedLinkId = null;
 let draggedCatId = null;
@@ -149,13 +156,103 @@ function renderChat(){
     list.innerHTML = `<div class="text-center py-10 px-4"><p class="text-[34px] mb-2"><span class="emote-anim emote-bounce">🐰</span></p><p class="text-sm text-zinc-400 font-medium">Belum ada komentar</p><p class="text-xs text-zinc-600 mt-1">Jadi yang pertama yuk (˶ᵔᵕᵔ˶)</p></div>`;
     return;
   }
-  list.innerHTML = allComments.map(c => {
+  // divider: komentar pertama yang lebih baru dari lastSeen (sebelum di-update saat buka)
+  let dividerIdx = -1;
+  if (dividerBeforeId) {
+    dividerIdx = allComments.findIndex(c => String(c.id) === String(dividerBeforeId));
+  } else if (lastSeenCommentId) {
+    const seenIdx = allComments.findIndex(c => String(c.id) === String(lastSeenCommentId));
+    if (seenIdx !== -1 && seenIdx < allComments.length - 1) dividerIdx = seenIdx + 1;
+  }
+  const htmlParts = [];
+  allComments.forEach((c, idx) => {
+    if (idx === dividerIdx && !c.pending) {
+      htmlParts.push(`<div class="flex items-center gap-2 py-1"><div class="flex-1 h-px bg-zinc-800"></div><span class="text-[10px] tracking-wider uppercase text-emerald-400 font-medium whitespace-nowrap">Pesan baru</span><div class="flex-1 h-px bg-zinc-800"></div></div>`);
+    }
     const initial = (c.name||'T').trim().charAt(0).toUpperCase() || 'T';
     const liked = likedCommentIds.has(String(c.id));
+    const isPending = !!c.pending;
+    const isFailed = !!c.failed;
     const delBtn = adminPass ? `<button onclick="deleteComment('${c.id}')" title="Hapus komentar" class="text-[11px] text-zinc-600 hover:text-rose-400 px-1">Hapus</button>` : '';
-    return `<div class="flex gap-2.5"><div class="w-8 h-8 rounded-full border flex items-center justify-center text-[13px] font-bold shrink-0 ${avatarColor(c.name)}">${escapeHtml(initial)}</div><div class="flex-1 min-w-0"><div class="flex items-baseline gap-2 flex-wrap"><span class="text-[13px] font-semibold text-zinc-100 truncate">${escapeHtml(c.name)}</span><span class="text-[10px] text-zinc-500">${escapeHtml(formatRelativeTime(c.createdAt))}</span></div><div class="chat-bubble mt-1 inline-block max-w-full px-3 py-2 rounded-2xl rounded-tl-md bg-zinc-800/80 border border-zinc-700/60 text-[13px] text-zinc-100 leading-relaxed">${renderMessageContent(c.message)}</div><div class="flex items-center gap-2 mt-1"><button onclick="toggleCommentLike('${c.id}')" class="flex items-center gap-1 text-[11px] ${liked ? 'text-rose-400' : 'text-zinc-500 hover:text-rose-300'}"><span class="emote-anim ${liked ? 'emote-heartbeat' : ''}">❤️</span> ${c.likes||0}</button>${delBtn}</div></div></div>`;
-  }).join('');
-  list.scrollTop = list.scrollHeight;
+    const pinBtn = adminPass ? `<button onclick="togglePinComment('${c.id}')" title="${c.pinned ? 'Unpin' : 'Pin'}" class="text-[11px] ${c.pinned ? 'text-amber-400' : 'text-zinc-600 hover:text-amber-300'} px-1">${c.pinned ? '📌 Unpin' : '📌 Pin'}</button>` : '';
+    const replyBtn = `<button onclick="setReply('${c.id}')" class="text-[11px] text-zinc-500 hover:text-emerald-400 px-1">↩ Balas</button>`;
+    const quote = (c.replyToId && c.replyToName) ? `<button onclick="scrollToComment('${c.replyToId}')" class="block w-full text-left mb-1.5 px-2.5 py-1.5 rounded-lg bg-zinc-900/80 border border-zinc-800/80 hover:border-emerald-500/40 transition-colors"><p class="text-[10px] text-emerald-400 font-medium">↪ Balas ke ${escapeHtml(c.replyToName)}</p><p class="text-[11px] text-zinc-400 truncate">${escapeHtml(c.replyToMessage || '')}</p></button>` : '';
+    const pinBadge = c.pinned ? `<span class="text-[10px] font-medium text-amber-400 bg-amber-500/10 border border-amber-500/25 px-1.5 py-0.5 rounded-full">📌 Dipin</span>` : '';
+    const statusLine = isPending ? `<span class="inline-flex items-center gap-1.5 text-[10px] text-zinc-500"><span class="typing-dot"></span><span class="typing-dot"></span><span class="typing-dot"></span> Mengirim...</span>` : isFailed ? `<span class="text-[10px] text-rose-400">Gagal terkirim • <button onclick="retrySendComment('${c.id}')" class="underline">Coba lagi</button></span>` : '';
+    htmlParts.push(`<div id="comment-${c.id}" data-comment-id="${c.id}" onpointerdown="chatPressStart(event,'${c.id}')" onpointerup="chatPressEnd(event)" onpointerleave="chatPressEnd(event)" ontouchstart="chatTouchStart(event,'${c.id}')" ontouchend="chatTouchEnd(event,'${c.id}')" class="flex gap-2.5 ${isPending ? 'chat-pending' : ''} ${isFailed ? 'chat-failed' : ''} ${c.pinned ? 'rounded-xl border border-amber-500/25 bg-amber-500/5 p-2 -mx-2' : ''}"><div class="w-8 h-8 rounded-full border flex items-center justify-center text-[13px] font-bold shrink-0 ${avatarColor(c.name)}">${escapeHtml(initial)}</div><div class="flex-1 min-w-0"><div class="flex items-baseline gap-2 flex-wrap"><span class="text-[13px] font-semibold text-zinc-100 truncate">${escapeHtml(c.name)}</span><span class="text-[10px] text-zinc-500">${escapeHtml(formatRelativeTime(c.createdAt))}</span>${pinBadge}</div>${quote}<div class="chat-bubble mt-1 inline-block max-w-full px-3 py-2 rounded-2xl rounded-tl-md bg-zinc-800/80 border border-zinc-700/60 text-[13px] text-zinc-100 leading-relaxed">${renderMessageContent(c.message)}</div><div class="flex items-center gap-1 mt-1 flex-wrap"><button onclick="toggleCommentLike('${c.id}')" class="flex items-center gap-1 text-[11px] ${liked ? 'text-rose-400' : 'text-zinc-500 hover:text-rose-300'}"><span class="emote-anim ${liked ? 'emote-heartbeat' : ''}">❤️</span> ${c.likes||0}</button>${replyBtn}${pinBtn}${delBtn}</div>${statusLine ? `<div class="mt-1">${statusLine}</div>` : ''}</div></div>`);
+  });
+  list.innerHTML = htmlParts.join('');
+  // jangan auto-scroll kalau lagi baca atas, tapi kalau baru kirim / buka, scroll ke bawah
+  if (chatOpen) {
+    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 220;
+    if (nearBottom || dividerIdx === -1) list.scrollTop = list.scrollHeight;
+  }
+}
+function setReply(id){
+  const c = allComments.find(x=>String(x.id)===String(id)); if(!c) return;
+  pendingReply = {id: String(c.id), name: c.name, message: c.message};
+  const prev = document.getElementById('replyPreview');
+  const prevName = document.getElementById('replyPreviewName');
+  const prevText = document.getElementById('replyPreviewText');
+  if (prev) prev.classList.remove('hidden');
+  if (prevName) prevName.textContent = '@' + c.name;
+  if (prevText) prevText.textContent = c.message;
+  const inp = document.getElementById('chatMessageInput'); if (inp) inp.focus();
+}
+function cancelReply(){
+  pendingReply = null;
+  const prev = document.getElementById('replyPreview'); if (prev) prev.classList.add('hidden');
+}
+function scrollToComment(id){
+  const el = document.getElementById('comment-' + id);
+  if (!el) { showToast('Komentar asli sudah tidak ada','info'); return; }
+  el.scrollIntoView({behavior:'smooth', block:'center'});
+  el.classList.remove('comment-flash'); void el.offsetWidth; el.classList.add('comment-flash');
+  setTimeout(()=>el.classList.remove('comment-flash'), 2000);
+}
+function chatPressStart(e, id){
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  longPressFired = false;
+  clearTimeout(pressTimer);
+  pressTimer = setTimeout(()=>{ longPressFired = true; setReply(id); if (navigator.vibrate) try{ navigator.vibrate(20); }catch(_){} }, 550);
+}
+function chatPressEnd(e){
+  clearTimeout(pressTimer);
+}
+function chatTouchStart(e, id){
+  touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY;
+}
+function chatTouchEnd(e, id){
+  const touch = e.changedTouches[0];
+  const dx = touch.clientX - touchStartX;
+  const dy = Math.abs(touch.clientY - touchStartY);
+  if (dx > 65 && dy < 40) { setReply(id); }
+  clearTimeout(pressTimer);
+}
+async function togglePinComment(id){
+  if (!adminPass) return;
+  try{
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'pin_comment', password: adminPass, id})});
+    const json = await res.json();
+    if (json.status === 'success') { showToast(json.pinned ? 'Komentar dipin' : 'Pin dilepas','success'); fetchCommentsOnly(); }
+    else showToast(json.message||'Gagal pin','error');
+  }catch(_){ showToast('Gagal terhubung ke server','error'); }
+}
+async function retrySendComment(tempId){
+  const c = allComments.find(x=>String(x.id)===String(tempId)); if(!c || !c.failed) return;
+  c.failed = false; c.pending = true; renderChat();
+  try{
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'add_comment', name: c.name, message: c.message, replyToId: c.replyToId||'', replyToName: c.replyToName||'', replyToMessage: c.replyToMessage||''})});
+    const json = await res.json();
+    if (json.status === 'success' && json.comment) {
+      const idx = allComments.findIndex(x=>String(x.id)===String(tempId));
+      if (idx !== -1) allComments[idx] = json.comment;
+      renderChat();
+    } else throw new Error(json.message||'Gagal');
+  }catch(_){
+    const cc = allComments.find(x=>String(x.id)===String(tempId)); if (cc) { cc.pending=false; cc.failed=true; }
+    renderChat(); showToast('Gagal kirim, coba lagi','error');
+  }
 }
 function updateChatBadge(){
   const badge = document.getElementById('chatBadge');
@@ -167,12 +264,19 @@ function updateChatBadge(){
   else badge.classList.add('hidden');
 }
 function openChatModal(){
+  // simpan posisi divider sebelum lastSeen di-update
+  if (lastSeenCommentId && allComments.length) {
+    const seenIdx = allComments.findIndex(c=>String(c.id)===String(lastSeenCommentId));
+    if (seenIdx !== -1 && seenIdx < allComments.length - 1) dividerBeforeId = String(allComments[seenIdx+1].id);
+    else dividerBeforeId = '';
+  } else if (allComments.length) dividerBeforeId = '';
   chatOpen = true;
   const badge = document.getElementById('chatBadge'); if (badge) badge.classList.add('hidden');
   if (allComments.length) { lastSeenCommentId = String(allComments[allComments.length-1].id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(e){} }
   openModal('chatModal');
   renderChat();
   startChatPolling();
+  setTimeout(()=>{ if (allComments.length) { lastSeenCommentId = String(allComments[allComments.length-1].id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(e){} dividerBeforeId=''; } }, 2500);
   setTimeout(()=>{ const inp = document.getElementById('chatMessageInput'); if (inp) inp.focus(); }, 250);
 }
 function startChatPolling(){
@@ -189,11 +293,24 @@ async function fetchCommentsOnly(){
     }
   }catch(e){}
 }
+let visitAnimFrame = null;
 function renderVisitCount(){
   const el = document.getElementById('visitCount');
   if (!el) return;
   const fmt = (n) => Number(n||0).toLocaleString('id-ID');
-  el.textContent = `👁 ${fmt(visitData.total)} kunjungan • ${fmt(visitData.today)} hari ini`;
+  const targetTotal = Number(visitData.total||0);
+  const targetToday = Number(visitData.today||0);
+  if (visitAnimFrame) cancelAnimationFrame(visitAnimFrame);
+  const start = performance.now(); const dur = 850;
+  const tick = (now) => {
+    const p = Math.min((now - start)/dur, 1);
+    const eased = 1 - Math.pow(1 - p, 3);
+    const curTotal = Math.round(targetTotal * eased);
+    const curToday = Math.round(targetToday * eased);
+    el.textContent = `👁 ${fmt(curTotal)} kunjungan • ${fmt(curToday)} hari ini`;
+    if (p < 1) visitAnimFrame = requestAnimationFrame(tick);
+  };
+  visitAnimFrame = requestAnimationFrame(tick);
 }
 async function trackVisit(){
   try{
@@ -232,19 +349,29 @@ async function sendChat(e){
   const message = (msgInput?.value || '').trim();
   if (!message) { showToast('Tulis komentar dulu','info'); return; }
   if (message.length > 200) { showToast('Max 200 karakter','error'); return; }
+  const reply = pendingReply ? {...pendingReply} : null;
+  const tempId = 'temp_' + Date.now();
+  const nowStr = (()=>{ const d=new Date(); const p=(n)=>String(n).padStart(2,'0'); return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`; })();
+  const optimistic = {id: tempId, name, message, createdAt: nowStr, likes: 0, pending: true, failed: false, replyToId: reply?.id||'', replyToName: reply?.name||'', replyToMessage: reply?.message||'', pinned: false};
+  allComments.push(optimistic);
+  renderChat();
+  if (msgInput) { msgInput.value=''; msgInput.style.height='auto'; }
+  cancelReply();
+  document.getElementById('emotePicker')?.classList.add('hidden');
   if (btn) { btn.disabled = true; btn.style.opacity = '.6'; }
   try{
-    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'add_comment', name, message})});
+    const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'add_comment', name, message, replyToId: reply?.id||'', replyToName: reply?.name||'', replyToMessage: reply?.message||''})});
     const json = await res.json();
-    if (json.status === 'success') {
-      if (msgInput) msgInput.value = '';
-      document.getElementById('emotePicker')?.classList.add('hidden');
-      if (json.comment) { allComments.push(json.comment); lastSeenCommentId = String(json.comment.id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(_){} }
+    if (json.status === 'success' && json.comment) {
+      const idx = allComments.findIndex(x=>String(x.id)===String(tempId));
+      if (idx !== -1) allComments[idx] = json.comment;
+      lastSeenCommentId = String(json.comment.id); try{ localStorage.setItem('sainbyte_last_seen_comment', lastSeenCommentId); }catch(_){}
       renderChat();
-      // refresh dari server biar timestamp akurat
-      fetchCommentsOnly();
-    } else showToast(json.message || 'Gagal kirim komentar','error');
-  }catch(err){ showToast('Gagal terhubung ke server','error'); }
+    } else throw new Error(json.message||'Gagal');
+  }catch(err){
+    const cc = allComments.find(x=>String(x.id)===String(tempId)); if (cc) { cc.pending=false; cc.failed=true; }
+    renderChat(); showToast('Gagal kirim, tap Coba lagi','error');
+  }
   finally{ if (btn) { btn.disabled = false; btn.style.opacity = '1'; } }
 }
 async function toggleCommentLike(id){
@@ -263,12 +390,14 @@ async function toggleCommentLike(id){
 async function deleteComment(id){
   if (!adminPass) return;
   if (!confirm('Hapus komentar ini?')) return;
+  const el = document.getElementById('comment-' + id);
+  if (el) el.classList.add('comment-fade-out');
   try{
     const res = await fetch(API_URL, {method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'}, body: JSON.stringify({action:'delete_comment', password: adminPass, id})});
     const json = await res.json();
-    if (json.status === 'success') { allComments = allComments.filter(x=>String(x.id)!==String(id)); renderChat(); showToast('Komentar dihapus','success'); }
-    else showToast(json.message||'Gagal hapus','error');
-  }catch(_){ showToast('Gagal terhubung ke server','error'); }
+    if (json.status === 'success') { setTimeout(()=>{ allComments = allComments.filter(x=>String(x.id)!==String(id)); renderChat(); }, 300); showToast('Komentar dihapus','success'); }
+    else { if (el) el.classList.remove('comment-fade-out'); showToast(json.message||'Gagal hapus','error'); }
+  }catch(_){ if (el) el.classList.remove('comment-fade-out'); showToast('Gagal terhubung ke server','error'); }
 }
 
 
@@ -326,7 +455,7 @@ function renderLinks(links){
     const dragAttrs = adminPass ? `draggable="true" ondragstart="handleLinkDragStart(event,'${item.id}')" ondragover="handleLinkDragOver(event)" ondragleave="handleLinkDragLeave(event)" ondrop="handleLinkDrop(event,'${item.id}')" ondragend="handleLinkDragEnd(event)"` : '';
     const dragHandle = adminPass ? `<span class="drag-handle text-zinc-600 pt-1 pr-0.5 select-none" title="Drag untuk ubah urutan">⠿</span>` : '';
     const adminMenu = adminPass ? `<div class="admin-menu-wrap relative shrink-0" onclick="event.stopPropagation()"><button onclick="toggleAdminMenu('${item.id}', event)" title="Menu" aria-label="Menu project" class="p-2 rounded-lg text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"><svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button><div id="adminMenu-${item.id}" class="admin-menu-panel hidden absolute right-0 top-10 z-30 w-44 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl shadow-black/50 p-1.5"><button onclick="toggleFavorite('${item.id}')" class="w-full text-left px-3 py-2 rounded-lg text-[13px] text-zinc-200 hover:bg-zinc-800 flex items-center gap-2">${isFavorite ? '★ Hapus dari favorit' : '☆ Jadikan favorit'}</button><button onclick="toggleHideLink('${item.id}')" class="w-full text-left px-3 py-2 rounded-lg text-[13px] text-zinc-200 hover:bg-zinc-800">${isHidden ? 'Tampilkan' : 'Sembunyikan'}</button><button onclick="openEditModal('${item.id}')" class="w-full text-left px-3 py-2 rounded-lg text-[13px] text-zinc-200 hover:bg-zinc-800">Edit</button><button onclick="moveLink('${item.id}', -1)" ${globalIndex<=0 ? 'disabled':''} class="w-full text-left px-3 py-2 rounded-lg text-[13px] text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none">Pindah ke atas</button><button onclick="moveLink('${item.id}', 1)" ${globalIndex>=allLinks.length-1 ? 'disabled':''} class="w-full text-left px-3 py-2 rounded-lg text-[13px] text-zinc-200 hover:bg-zinc-800 disabled:opacity-30 disabled:pointer-events-none">Pindah ke bawah</button><div class="h-px bg-zinc-800 my-1"></div><button onclick="openDeleteLinkModal('${item.id}', '${escapeHtml(item.title)}')" class="w-full text-left px-3 py-2 rounded-lg text-[13px] text-rose-400 hover:bg-rose-950/40">Hapus</button></div></div>` : '';
-    return `<div ${dragAttrs} onclick="openLinkConfirm('${item.id}')" ${shouldAnimate ? `style="animation-delay:${delay}ms"` : ''} class="group relative flex items-start gap-2 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-colors duration-150 ${isHidden ? 'bg-zinc-950/50 border-dashed border-zinc-800/70 opacity-60 hover:opacity-95' : 'bg-zinc-900/60 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700'} ${shouldAnimate ? 'animate-row' : ''}">${dragHandle}<div class="flex-1 min-w-0"><div class="flex items-center gap-2 flex-wrap"><h3 class="font-semibold text-[15px] sm:text-base text-zinc-100 group-hover:text-emerald-400 transition-colors leading-snug">${escapeHtml(item.title)}</h3>${isFavorite ? `<span class="text-amber-400 shrink-0" title="Favorit"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 17.05l-5.5 2.89 1.05-6.13L3.1 9.47l6.15-.9L12 3z"/></svg></span>` : ''}${item.category ? `<span class="text-[10px] font-medium text-zinc-300 bg-zinc-800/80 border border-zinc-700/60 px-2 py-0.5 rounded-full">${escapeHtml(item.category)}</span>` : ''}${isHidden ? '<span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Hidden</span>' : ''}</div>${item.description ? `<p class="text-[13px] sm:text-sm text-zinc-400 line-clamp-2 leading-relaxed mt-1">${escapeHtml(item.description)}</p>` : ''}<p class="text-[11px] font-mono text-zinc-500 mt-1.5 truncate">${escapeHtml(domain)}</p></div><div class="flex items-start gap-0.5 shrink-0 pt-0.5"><div class="text-zinc-600 group-hover:text-emerald-400 pt-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>${adminMenu}</div></div>`;
+    return `<div id="link-${item.id}" ${dragAttrs} onclick="openLinkConfirm('${item.id}')" ${shouldAnimate ? `style="animation-delay:${delay}ms"` : ''} class="group relative flex items-start gap-2 p-3.5 sm:p-4 rounded-xl border cursor-pointer transition-colors duration-150 ${isHidden ? 'bg-zinc-950/50 border-dashed border-zinc-800/70 opacity-60 hover:opacity-95' : 'bg-zinc-900/60 hover:bg-zinc-900 border-zinc-800/80 hover:border-zinc-700'} ${shouldAnimate ? 'animate-row' : ''}">${dragHandle}<div class="flex-1 min-w-0"><div class="flex items-center gap-2 flex-wrap"><h3 class="font-semibold text-[15px] sm:text-base text-zinc-100 group-hover:text-emerald-400 transition-colors leading-snug">${escapeHtml(item.title)}</h3>${isFavorite ? `<span class="text-amber-400 shrink-0" title="Favorit"><svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor"><path d="m12 3 2.75 5.57 6.15.9-4.45 4.34 1.05 6.13L12 17.05l-5.5 2.89 1.05-6.13L3.1 9.47l6.15-.9L12 3z"/></svg></span>` : ''}${item.category ? `<span class="text-[10px] font-medium text-zinc-300 bg-zinc-800/80 border border-zinc-700/60 px-2 py-0.5 rounded-full">${escapeHtml(item.category)}</span>` : ''}${isHidden ? '<span class="text-[10px] font-mono text-amber-400 bg-amber-500/10 border border-amber-500/20 px-1.5 py-0.5 rounded">Hidden</span>' : ''}</div>${item.description ? `<p class="text-[13px] sm:text-sm text-zinc-400 line-clamp-2 leading-relaxed mt-1">${escapeHtml(item.description)}</p>` : ''}<p class="text-[11px] font-mono text-zinc-500 mt-1.5 truncate">${escapeHtml(domain)}</p></div><div class="flex items-start gap-0.5 shrink-0 pt-0.5"><div class="text-zinc-600 group-hover:text-emerald-400 pt-2"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 17L17 7M17 7H7M17 7v10"/></svg></div>${adminMenu}</div></div>`;
   }).join('');
   if(shouldAnimate) hasAnimatedFirstLoad=true;
 }
@@ -348,7 +477,18 @@ document.getElementById('loginForm').addEventListener('submit', async (e)=>{ e.p
 function populateCategorySelect(v=''){ const s=document.getElementById('linkCategory'); s.innerHTML=`<option value="">Tanpa Kategori</option>`+allCategories.map(c=>`<option value="${escapeHtml(c.name)}">${escapeHtml(c.name)}</option>`).join(''); s.value=v; }
 function openAddModal(){ document.getElementById('linkModalTitle').textContent='Tambah Link Project'; document.getElementById('linkForm').reset(); document.getElementById('linkId').value=''; populateCategorySelect(''); openModal('linkModal'); setTimeout(()=>document.getElementById('linkTitle').focus(),100); }
 function openEditModal(id){ const item=allLinks.find(l=>String(l.id)===String(id)); if(!item) return; document.getElementById('linkModalTitle').textContent='Edit Link Project'; document.getElementById('linkId').value=item.id; document.getElementById('linkTitle').value=item.title; document.getElementById('linkDesc').value=item.description||''; document.getElementById('linkUrl').value=item.url; populateCategorySelect(item.category||''); openModal('linkModal'); }
-document.getElementById('linkForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const id=document.getElementById('linkId').value; const title=document.getElementById('linkTitle').value.trim(); const description=document.getElementById('linkDesc').value.trim(); const url=normalizeUrl(document.getElementById('linkUrl').value); const category=document.getElementById('linkCategory').value; const btn=document.getElementById('linkSubmitBtn'); const orig=btn.textContent; btn.disabled=true; btn.textContent='Menyimpan...'; const action=id?'edit_link':'add_link'; try{ const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,password:adminPass,id,title,description,url,category})}); const json=await res.json(); if(json.status==='success'){ closeModal('linkModal'); showToast(id?'Link diperbarui':'Link ditambahkan','success'); await fetchData({keepList:true}); } else showToast(json.message||'Gagal menyimpan','error'); }catch{ showToast('Gagal terhubung ke server','error'); } finally{ btn.disabled=false; btn.textContent=orig; } });
+document.getElementById('linkForm').addEventListener('submit', async (e)=>{ e.preventDefault(); const id=document.getElementById('linkId').value; const title=document.getElementById('linkTitle').value.trim(); const description=document.getElementById('linkDesc').value.trim(); const url=normalizeUrl(document.getElementById('linkUrl').value); const category=document.getElementById('linkCategory').value; const btn=document.getElementById('linkSubmitBtn'); const orig=btn.textContent; btn.disabled=true; btn.textContent='Menyimpan...'; const action=id?'edit_link':'add_link';
+  let optimisticPrev = null;
+  if (id) {
+    const idxO = allLinks.findIndex(x=>String(x.id)===String(id));
+    if (idxO !== -1) {
+      optimisticPrev = {...allLinks[idxO]};
+      allLinks[idxO] = {...allLinks[idxO], title, description, url, category};
+      renderCategoryFilter(); applyFiltersAndRender();
+      setTimeout(()=>{ const card = document.getElementById('link-' + id); if (card) { card.classList.remove('card-flash'); void card.offsetWidth; card.classList.add('card-flash'); setTimeout(()=>card.classList.remove('card-flash'), 2400); } }, 90);
+    }
+  }
+  try{ const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action,password:adminPass,id,title,description,url,category})}); const json=await res.json(); if(json.status==='success'){ closeModal('linkModal'); showToast(id?'Link diperbarui':'Link ditambahkan','success'); await fetchData({keepList:true}); if(id){ setTimeout(()=>{ const card2=document.getElementById('link-'+id); if(card2){ card2.classList.add('card-flash'); setTimeout(()=>card2.classList.remove('card-flash'),2400); } },80); } } else { if (optimisticPrev) { const idx2 = allLinks.findIndex(x=>String(x.id)===String(id)); if (idx2!==-1) allLinks[idx2]=optimisticPrev; renderCategoryFilter(); applyFiltersAndRender(); } showToast(json.message||'Gagal menyimpan','error'); } }catch{ if (optimisticPrev) { const idx3 = allLinks.findIndex(x=>String(x.id)===String(id)); if (idx3!==-1) allLinks[idx3]=optimisticPrev; renderCategoryFilter(); applyFiltersAndRender(); } showToast('Gagal terhubung ke server','error'); } finally{ btn.disabled=false; btn.textContent=orig; } });
 async function toggleHideLink(id){ const t=allLinks.find(l=>String(l.id)===String(id)); if(t){ t.hidden=!t.hidden; applyFiltersAndRender(); } try{ const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'toggle_hide',password:adminPass,id})}); const json=await res.json(); if(json.status==='success') showToast(json.hidden?'Link disembunyikan':'Link ditampilkan kembali','info'); else { showToast(json.message||'Gagal mengubah status','error'); await fetchData({keepList:true}); } }catch{ showToast('Gagal terhubung ke server','error'); await fetchData({keepList:true}); } }
 function openDeleteLinkModal(id,title){ pendingDeleteLinkId=id; document.getElementById('deleteLinkTitle').textContent=title||'project ini'; openModal('deleteLinkModal'); }
 async function confirmDeleteLink(){ if(!pendingDeleteLinkId) return; const id=pendingDeleteLinkId; pendingDeleteLinkId=null; closeModal('deleteLinkModal'); showToast('Menghapus...','info'); try{ const res=await fetch(API_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify({action:'delete_link',password:adminPass,id})}); const json=await res.json(); if(json.status==='success'){ allLinks=allLinks.filter(x=>String(x.id)!==String(id)); renderCategoryFilter(); applyFiltersAndRender(); showToast('Link dihapus','success'); } else showToast(json.message||'Gagal menghapus','error'); }catch{ showToast('Gagal terhubung ke server','error'); } }
