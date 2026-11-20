@@ -1,292 +1,209 @@
-
 <!DOCTYPE html>
-<html lang="id" class="dark">
+<html lang="id" class="dark" data-mode="dark" data-accent="emerald">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <script>
+    try {
+      var savedMode = localStorage.getItem('sainbyte_mode') || 'dark';
+      var savedAccent = localStorage.getItem('sainbyte_accent') || 'emerald';
+      document.documentElement.setAttribute('data-mode', savedMode);
+      document.documentElement.setAttribute('data-accent', savedAccent);
+      if (savedMode === 'light') document.documentElement.classList.remove('dark'); else document.documentElement.classList.add('dark');
+    } catch(e) {}
+  </script>
+  <meta id="viewportMeta" name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=yes, minimum-scale=0.5, maximum-scale=5.0" />
+  <script>
+    try {
+      var isMobileSite = /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent) && window.innerWidth <= 768;
+      var meta = document.getElementById('viewportMeta');
+      if (isMobileSite) meta.setAttribute('content', 'width=device-width, initial-scale=0.8, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover');
+      else meta.setAttribute('content', 'width=device-width, initial-scale=1.0, minimum-scale=0.5, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover');
+    } catch(e) {}
+  </script>
   <meta name="theme-color" content="#09090b" />
+  <link rel="manifest" href="manifest.json" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="sainbyte" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="icon" type="image/png" href="icon-192.png" />
   <title>sainbyte — Project Dashboard</title>
-
-  <!-- Icons & Web Manifest -->
-
   <script src="https://cdn.tailwindcss.com"></script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
   <script>
-    tailwind.config = {
-      darkMode: 'class',
-      theme: {
-        extend: {
-          fontFamily: {
-            sans: ['Inter', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
-          }
-        }
-      }
-    }
+    tailwind.config = { darkMode: 'class', theme: { extend: { fontFamily: { sans: ['Inter','sans-serif'], mono: ['JetBrains Mono','monospace'] } } } }
   </script>
   <style>
-    body {
-      background-color: #09090b;
-      background-image: 
-        radial-gradient(at 0% 0%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
-        radial-gradient(at 100% 0%, rgba(59, 130, 246, 0.08) 0px, transparent 50%);
-      background-attachment: fixed;
-    }
-
-    @keyframes fadeSlideUp {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-
-    .animate-row {
-      animation: fadeSlideUp 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
-      opacity: 0;
-    }
-
-    .modal-backdrop { transition: opacity 0.22s ease; }
-    .modal-card { transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.22s ease; }
-
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: #09090b; }
-    ::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
-    ::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+    html { -webkit-text-size-adjust: 100%; }
+    body { background-color:#09090b; background-image: radial-gradient(at 0% 0%, rgba(16,185,129,0.07) 0px, transparent 50%), radial-gradient(at 100% 100%, rgba(16,185,129,0.04) 0px, transparent 45%); }
+    html, body { overflow-x: clip; width:100%; max-width:100%; overscroll-behavior-x:none; touch-action: pan-x pan-y pinch-zoom; }
+    #siteWrap { width:100%; max-width:100%; overflow-x:clip; }
+    *, *::before, *::after { box-sizing:border-box; }
+    img, video, iframe { max-width:100%; }
+    .modal-backdrop { overscroll-behavior:contain; overflow-x:clip; }
+    .modal-card { max-width: calc(100vw - 2rem); border-radius:1rem; }
+    :root { --accent:#10b981; --accent-hover:#34d399; --accent-soft:rgba(16,185,129,.15); --accent-border:rgba(16,185,129,.35); }
+    [data-accent="sky"] { --accent:#0ea5e9; --accent-hover:#38bdf8; --accent-soft:rgba(14,165,233,.15); --accent-border:rgba(14,165,233,.35); }
+    [data-accent="violet"] { --accent:#8b5cf6; --accent-hover:#a78bfa; --accent-soft:rgba(139,92,246,.16); --accent-border:rgba(139,92,246,.35); }
+    [data-accent="amber"] { --accent:#f59e0b; --accent-hover:#fbbf24; --accent-soft:rgba(245,158,11,.16); --accent-border:rgba(245,158,11,.35); }
+    [data-accent="rose"] { --accent:#f43f5e; --accent-hover:#fb7185; --accent-soft:rgba(244,63,94,.15); --accent-border:rgba(244,63,94,.35); }
+    [data-accent="cyan"] { --accent:#06b6d4; --accent-hover:#22d3ee; --accent-soft:rgba(6,182,212,.15); --accent-border:rgba(6,182,212,.35); }
+    [data-accent] .bg-emerald-500 { background-color:var(--accent) !important; }
+    [data-accent] .bg-emerald-400 { background-color:var(--accent) !important; }
+    [data-accent] .bg-emerald-500\/15 { background-color:var(--accent-soft) !important; }
+    [data-accent] .text-emerald-400, [data-accent] .text-emerald-300, [data-accent] .text-emerald-200 { color:var(--accent) !important; }
+    [data-accent] .border-emerald-500\/60, [data-accent] .border-emerald-500\/25, [data-accent] .border-emerald-500 { border-color:var(--accent-border) !important; }
+    [data-accent] .hover\:bg-emerald-400:hover { background-color:var(--accent-hover) !important; }
+    [data-accent] .border-t-emerald-400 { border-top-color:var(--accent) !important; }
+    [data-accent] .group:hover .group-hover\:text-emerald-400 { color:var(--accent) !important; }
+    [data-accent] .ring-emerald-500\/15, [data-accent] .ring-emerald-500\/20 { --tw-ring-color:var(--accent-soft) !important; }
+    [data-accent] .selection\:bg-emerald-500\/30::selection { background-color:var(--accent-soft) !important; }
+    [data-accent] .shadow-emerald-500\/20 { --tw-shadow-color:var(--accent-soft) !important; }
+    [data-mode="light"] body { background-color:#f4f4f5 !important; background-image:none !important; color:#18181b !important; }
+    [data-mode="light"] .bg-zinc-950\/80, [data-mode="light"] .bg-zinc-950\/85 { background-color:rgba(255,255,255,.88) !important; }
+    [data-mode="light"] .bg-zinc-900, [data-mode="light"] .bg-zinc-900\/60, [data-mode="light"] .bg-zinc-900\/70 { background-color:#ffffff !important; }
+    [data-mode="light"] .bg-zinc-950 { background-color:#f4f4f5 !important; }
+    [data-mode="light"] .bg-zinc-800, [data-mode="light"] .bg-zinc-800\/80 { background-color:#e4e4e7 !important; }
+    [data-mode="light"] .text-white, [data-mode="light"] .text-zinc-100 { color:#18181b !important; }
+    [data-mode="light"] .text-zinc-200 { color:#27272a !important; }
+    [data-mode="light"] .text-zinc-300 { color:#3f3f46 !important; }
+    [data-mode="light"] .text-zinc-400 { color:#52525b !important; }
+    [data-mode="light"] .text-zinc-500, [data-mode="light"] .text-zinc-600 { color:#71717a !important; }
+    [data-mode="light"] .border-zinc-800, [data-mode="light"] .border-zinc-800\/80, [data-mode="light"] .border-zinc-800\/90, [data-mode="light"] .border-zinc-700, [data-mode="light"] .border-zinc-700\/60 { border-color:#e4e4e7 !important; }
+    [data-mode="light"] .placeholder-zinc-500::placeholder, [data-mode="light"] .placeholder-zinc-600::placeholder { color:#a1a1aa !important; }
+    [data-mode="light"] .bg-black\/70 { background-color:rgba(0,0,0,.35) !important; }
+    [data-mode="light"] .hover\:bg-zinc-800:hover, [data-mode="light"] .hover\:bg-zinc-900:hover { background-color:#e4e4e7 !important; }
+    [data-mode="light"] .hover\:bg-zinc-700:hover { background-color:#d4d4d8 !important; }
+    [data-mode="light"] .hover\:text-white:hover { color:#18181b !important; }
+    [data-mode="light"] ::-webkit-scrollbar-track { background:#f4f4f5; }
+    [data-mode="light"] ::-webkit-scrollbar-thumb { background:#d4d4d8; }
+    [data-mode="light"] .text-amber-400 { color:#d97706 !important; }
+    [data-mode="light"] .shadow-emerald-500\/20 { --tw-shadow-color:rgba(0,0,0,.06) !important; }
+    [data-mode="light"] [class*="bg-zinc-900"] { background-color:#ffffff !important; }
+    [data-mode="light"] [class*="bg-zinc-950"] { background-color:#f4f4f5 !important; }
+    [data-mode="light"] [class*="bg-zinc-800"] { background-color:#e4e4e7 !important; }
+    [data-mode="light"] [class*="bg-zinc-700"] { background-color:#e4e4e7 !important; }
+    [data-mode="light"] [class*="bg-black"] { background-color:rgba(0,0,0,.35) !important; }
+    [data-mode="light"] [class*="text-zinc-100"] { color:#18181b !important; }
+    [data-mode="light"] [class*="text-zinc-200"] { color:#27272a !important; }
+    [data-mode="light"] [class*="text-zinc-300"] { color:#3f3f46 !important; }
+    [data-mode="light"] [class*="text-zinc-400"] { color:#52525b !important; }
+    [data-mode="light"] [class*="text-zinc-500"] { color:#71717a !important; }
+    [data-mode="light"] [class*="text-zinc-600"] { color:#71717a !important; }
+    [data-mode="light"] [class*="text-white"] { color:#18181b !important; }
+    [data-mode="light"] .bg-emerald-500 { color:#ffffff !important; }
+    [data-mode="light"] .bg-zinc-900\/30, [data-mode="light"] .bg-zinc-950\/50 { background-color:#f4f4f5 !important; }
+    .dragging { opacity:.45 !important; }
+    .drag-over { outline:2px dashed var(--accent) !important; outline-offset:2px; }
+    .drag-handle { cursor:grab; touch-action:none; }
+    .drag-handle:active { cursor:grabbing; }
+    @keyframes fadeSlideUp { from { opacity:0; transform:translateY(10px);} to { opacity:1; transform:translateY(0);} }
+    .animate-row { animation: fadeSlideUp 0.28s cubic-bezier(0.16,1,0.3,1) forwards; opacity:0; }
+    .modal-backdrop { transition: opacity 0.24s ease; }
+    .modal-card { transition: transform 0.26s cubic-bezier(0.16,1,0.3,1), opacity 0.24s ease; }
+    .no-scrollbar::-webkit-scrollbar { display:none; }
+    .no-scrollbar { -ms-overflow-style:none; scrollbar-width:none; }
+    ::-webkit-scrollbar { width:6px; }
+    ::-webkit-scrollbar-track { background:#09090b; }
+    ::-webkit-scrollbar-thumb { background:#27272a; border-radius:9999px; }
+    ::-webkit-scrollbar-thumb:hover { background:#3f3f46; }
+    .line-clamp-2 { display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+    .category-mask { -webkit-mask-image:linear-gradient(to right, black 88%, transparent 100%); mask-image:linear-gradient(to right, black 88%, transparent 100%); }
+    .admin-menu-panel { animation: fadeSlideUp 0.16s cubic-bezier(0.16,1,0.3,1) forwards; }
+    #toastProgress { transition: width 3s linear; }
+    :focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
   </style>
 </head>
-<body class="text-zinc-100 antialiased min-h-screen flex flex-col selection:bg-emerald-500/30 selection:text-emerald-200">
-
-  <!-- Navbar / Header -->
-  <header class="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/75 backdrop-blur-md">
-    <div class="max-w-3xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-2">
-      <a href="#" onclick="resetFilters(event)" class="flex items-center gap-2.5 group shrink-0">
-        <span class="w-7 h-7 rounded-lg bg-emerald-500/15 border border-emerald-500/25 flex items-center justify-center text-emerald-400 font-mono font-bold text-sm">s</span>
-        <span class="font-mono font-bold text-lg tracking-tight text-white">sainbyte</span>
-      </a>
-
-      <!-- Auth Actions -->
-      <div id="authControls" class="flex items-center gap-1.5 sm:gap-2"></div>
-    </div>
-  </header>
-
-  <!-- Main Content -->
-  <main class="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 py-7 sm:py-9">
-    
-    <!-- Search & Count -->
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-      <div class="relative flex-1">
-        <svg class="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" />
-        </svg>
-        <input 
-          type="text" 
-          id="searchInput" 
-          placeholder="Cari project atau keterangan..." 
-          class="w-full bg-zinc-900/70 border border-zinc-800/90 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/15 transition-all"
-        />
-      </div>
-      <div class="text-xs font-mono text-zinc-500 px-1 shrink-0" id="projectCount">
-        Memuat data...
-      </div>
-    </div>
-
-    <!-- Category Filter Pills -->
-    <div id="categoryFilterBar" class="hidden flex items-center gap-2 overflow-x-auto no-scrollbar pb-3 mb-3"></div>
-
-    <!-- Links List Container -->
-    <div id="linksList" class="space-y-2.5">
-      <!-- Skeleton Loading -->
-      <div class="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/60 flex items-center gap-4 animate-pulse">
-        <div class="w-10 h-10 rounded-lg bg-zinc-800 shrink-0"></div>
-        <div class="flex-1 space-y-2">
-          <div class="h-4 bg-zinc-800 rounded w-1/3"></div>
-          <div class="h-3 bg-zinc-800/70 rounded w-2/3"></div>
+<body class="text-zinc-100 antialiased min-h-screen flex flex-col overflow-x-clip selection:bg-emerald-500/30 selection:text-emerald-200">
+  <div id="siteWrap" class="flex flex-col min-h-screen w-full">
+    <header class="sticky top-0 z-30 border-b border-zinc-800/80 bg-zinc-950/80 backdrop-blur-md">
+      <div class="max-w-3xl mx-auto px-4 sm:px-6 h-[64px] flex items-center justify-between gap-2">
+        <a href="#" onclick="resetFilters(event)" class="leading-none shrink-0 group">
+          <span class="block font-mono font-bold text-[19px] tracking-tight text-white">sainbyte</span>
+          <span class="block text-[10px] tracking-[0.16em] uppercase text-zinc-500 mt-1">dashboard list project</span>
+        </a>
+        <div class="flex items-center gap-1.5 sm:gap-2">
+          <div class="relative">
+            <button id="themeBtn" onclick="toggleThemeMenu(event)" title="Ganti tema warna" aria-label="Ganti tema warna" class="w-9 h-9 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition-colors active:scale-95">
+              <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3a9 9 0 100 18c1.2 0 2-.8 2-1.7 0-.9-.7-1.6-1.6-1.6H11a2 2 0 01-2-2c0-1.1.9-2 2-2h.5A5.5 5.5 0 0017 8.5c0-3-2.2-5.5-5-5.5z"/><circle cx="7.5" cy="10.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="12" cy="7.5" r="1.2" fill="currentColor" stroke="none"/><circle cx="16" cy="11" r="1.2" fill="currentColor" stroke="none"/></svg>
+            </button>
+            <div id="themeMenu" class="hidden absolute right-0 top-11 z-40 w-52 rounded-xl bg-zinc-900 border border-zinc-800 shadow-2xl shadow-black/50 p-2">
+              <p class="text-[10px] tracking-[0.14em] uppercase text-zinc-500 px-2 pt-1 pb-2">Tema warna</p>
+              <button onclick="setAccent('emerald'); closeThemeMenu()" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-800 text-left"><span class="w-4 h-4 rounded-full bg-emerald-500 shrink-0"></span><span class="text-[13px] text-zinc-200 flex-1">Emerald</span><span class="theme-check text-[13px] text-emerald-400" data-accent-check="emerald">✓</span></button>
+              <button onclick="setAccent('sky'); closeThemeMenu()" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-800 text-left"><span class="w-4 h-4 rounded-full bg-sky-500 shrink-0"></span><span class="text-[13px] text-zinc-200 flex-1">Sky</span><span class="theme-check text-[13px] text-emerald-400" data-accent-check="sky">✓</span></button>
+              <button onclick="setAccent('violet'); closeThemeMenu()" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-800 text-left"><span class="w-4 h-4 rounded-full bg-violet-500 shrink-0"></span><span class="text-[13px] text-zinc-200 flex-1">Violet</span><span class="theme-check text-[13px] text-emerald-400" data-accent-check="violet">✓</span></button>
+              <button onclick="setAccent('amber'); closeThemeMenu()" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-800 text-left"><span class="w-4 h-4 rounded-full bg-amber-500 shrink-0"></span><span class="text-[13px] text-zinc-200 flex-1">Amber</span><span class="theme-check text-[13px] text-emerald-400" data-accent-check="amber">✓</span></button>
+              <button onclick="setAccent('rose'); closeThemeMenu()" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-800 text-left"><span class="w-4 h-4 rounded-full bg-rose-500 shrink-0"></span><span class="text-[13px] text-zinc-200 flex-1">Rose</span><span class="theme-check text-[13px] text-emerald-400" data-accent-check="rose">✓</span></button>
+              <button onclick="setAccent('cyan'); closeThemeMenu()" class="w-full flex items-center gap-2.5 px-2 py-2 rounded-lg hover:bg-zinc-800 text-left"><span class="w-4 h-4 rounded-full bg-cyan-500 shrink-0"></span><span class="text-[13px] text-zinc-200 flex-1">Cyan</span><span class="theme-check text-[13px] text-emerald-400" data-accent-check="cyan">✓</span></button>
+            </div>
+          </div>
+          <button id="modeBtn" onclick="toggleMode()" title="Ganti mode gelap / terang" aria-label="Ganti mode gelap terang" class="w-9 h-9 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition-colors active:scale-95"><span id="modeIcon"></span></button>
+          <button id="installBtn" onclick="promptInstall()" title="Install App" aria-label="Install App" class="hidden w-9 h-9 rounded-lg bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 flex items-center justify-center text-zinc-300 hover:text-white transition-colors active:scale-95">
+            <svg class="w-[18px] h-[18px]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 3v12m0 0l-4-4m4 4l4-4M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2"/></svg>
+          </button>
+          <div id="authControls" class="flex items-center gap-1.5 sm:gap-2"></div>
         </div>
       </div>
-      <div class="p-4 rounded-xl bg-zinc-900/40 border border-zinc-800/60 flex items-center gap-4 animate-pulse">
-        <div class="w-10 h-10 rounded-lg bg-zinc-800 shrink-0"></div>
-        <div class="flex-1 space-y-2">
-          <div class="h-4 bg-zinc-800 rounded w-1/4"></div>
-          <div class="h-3 bg-zinc-800/70 rounded w-1/2"></div>
+    </header>
+    <main class="flex-1 max-w-3xl w-full mx-auto px-4 sm:px-6 pb-7 sm:pb-9">
+      <div class="sticky top-16 z-20 px-0 pt-3 pb-3 mb-2 bg-zinc-950/85 backdrop-blur-md border-b border-zinc-800/60">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div class="relative flex-1">
+            <svg class="w-4 h-4 text-zinc-500 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-4.35-4.35M17 11A6 6 0 115 11a6 6 0 0112 0z" /></svg>
+            <input type="text" id="searchInput" placeholder="Cari project atau keterangan..." class="w-full bg-zinc-900/70 border border-zinc-800/90 rounded-xl pl-10 pr-4 py-2.5 text-sm text-zinc-200 placeholder-zinc-500 focus:outline-none focus:border-emerald-500/60 focus:ring-2 focus:ring-emerald-500/15 transition-colors" />
+          </div>
+          <div class="text-xs font-mono text-zinc-500 px-1 shrink-0" id="projectCount">Memuat data...</div>
         </div>
+        <div id="categoryFilterBar" class="hidden flex items-center gap-2 overflow-x-auto no-scrollbar category-mask pt-3"></div>
       </div>
-    </div>
-
-  </main>
-
-  <!-- Footer -->
-  <footer class="max-w-3xl w-full mx-auto px-4 sm:px-6 py-6 text-center text-xs text-zinc-600 font-mono">
-    &copy; <span id="year"></span> sainbyte
-  </footer>
-
-  <!-- MODAL LOGIN -->
+      <div id="linksList" class="space-y-2.5">
+        <div id="initialLoading" class="flex items-center justify-center gap-2.5 py-14 text-zinc-500 text-sm"><span class="w-4 h-4 rounded-full border-2 border-zinc-700 border-t-emerald-400 animate-spin shrink-0"></span><span>Memuat data...</span></div>
+      </div>
+    </main>
+    <footer class="max-w-3xl w-full mx-auto px-4 sm:px-6 py-6 text-center text-xs text-zinc-600 font-mono">&copy; <span id="year"></span> sainbyte</footer>
+  </div>
   <div id="loginModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
-    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-6 shadow-2xl modal-card scale-95 opacity-0">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-base font-semibold text-white">Admin Access</h2>
-        <button onclick="closeModal('loginModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <form id="loginForm" class="space-y-4">
-        <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">Password</label>
-          <input 
-            type="password" 
-            id="loginPassword" 
-            required 
-            placeholder="Masukkan password admin..."
-            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-          />
-        </div>
-        <button 
-          type="submit" 
-          id="loginSubmitBtn"
-          class="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]"
-        >
-          Masuk
-        </button>
-      </form>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 sm:p-6 shadow-2xl modal-card scale-95 opacity-0 max-h-[92dvh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4"><h2 class="text-base font-semibold text-white">Admin Access</h2><button onclick="closeModal('loginModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+      <form id="loginForm" class="space-y-4"><div><label class="block text-xs font-medium text-zinc-400 mb-1.5">Password</label><input type="password" id="loginPassword" required placeholder="Password admin" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors" /></div><button type="submit" id="loginSubmitBtn" class="w-full bg-emerald-500 hover:bg-emerald-400 text-zinc-950 font-semibold text-sm py-2.5 rounded-xl transition-all active:scale-[0.98]">Masuk</button></form>
     </div>
   </div>
-
-  <!-- MODAL ADD / EDIT LINK -->
   <div id="linkModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
-    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl modal-card scale-95 opacity-0">
-      <div class="flex items-center justify-between mb-5">
-        <h2 id="linkModalTitle" class="text-base font-semibold text-white">Tambah Link Project</h2>
-        <button onclick="closeModal('linkModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <form id="linkForm" class="space-y-4">
-        <input type="hidden" id="linkId" />
-        <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">Nama Web / Project <span class="text-emerald-400">*</span></label>
-          <input 
-            type="text" 
-            id="linkTitle" 
-            required 
-            placeholder="Contoh: RunMe"
-            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">Keterangan <span class="text-zinc-600">(opsional)</span></label>
-          <input 
-            type="text" 
-            id="linkDesc" 
-            placeholder="Contoh: Website log run & tracking"
-            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">URL Website <span class="text-emerald-400">*</span></label>
-          <input 
-            type="text" 
-            id="linkUrl" 
-            required 
-            placeholder="run-me-jet.vercel.app atau https://..."
-            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all font-mono"
-          />
-        </div>
-        <div>
-          <label class="block text-xs font-medium text-zinc-400 mb-1.5">Kategori <span class="text-zinc-600">(opsional)</span></label>
-          <select 
-            id="linkCategory" 
-            class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-all"
-          >
-            <option value="">Tanpa Kategori</option>
-          </select>
-        </div>
-        <div class="pt-2 flex items-center justify-end gap-2.5">
-          <button 
-            type="button" 
-            onclick="closeModal('linkModal')" 
-            class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors"
-          >
-            Batal
-          </button>
-          <button 
-            type="submit" 
-            id="linkSubmitBtn"
-            class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all active:scale-[0.98]"
-          >
-            Simpan
-          </button>
-        </div>
-      </form>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl modal-card scale-95 opacity-0 max-h-[92dvh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-5"><h2 id="linkModalTitle" class="text-base font-semibold text-white">Tambah Link Project</h2><button onclick="closeModal('linkModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+      <form id="linkForm" class="space-y-4"><input type="hidden" id="linkId" /><div><label class="block text-xs font-medium text-zinc-400 mb-1.5">Nama Web / Project <span class="text-emerald-400">*</span></label><input type="text" id="linkTitle" required placeholder="Nama project" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors" /></div><div><label class="block text-xs font-medium text-zinc-400 mb-1.5">Keterangan <span class="text-zinc-600">(opsional)</span></label><input type="text" id="linkDesc" placeholder="Keterangan singkat project" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors" /></div><div><label class="block text-xs font-medium text-zinc-400 mb-1.5">URL Website <span class="text-emerald-400">*</span></label><input type="text" id="linkUrl" required placeholder="https:// atau domain project" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors font-mono" /></div><div><label class="block text-xs font-medium text-zinc-400 mb-1.5">Kategori <span class="text-zinc-600">(opsional)</span></label><select id="linkCategory" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 transition-colors"><option value="">Tanpa Kategori</option></select></div><div class="pt-2 flex items-center justify-end gap-2.5"><button type="button" onclick="closeModal('linkModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800 transition-colors">Batal</button><button type="submit" id="linkSubmitBtn" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all active:scale-[0.98]">Simpan</button></div></form>
     </div>
   </div>
-
-  <!-- MODAL KELOLA KATEGORI -->
   <div id="categoryModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
-    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-6 shadow-2xl modal-card scale-95 opacity-0">
-      <div class="flex items-center justify-between mb-4">
-        <h2 class="text-base font-semibold text-white">Kelola Kategori</h2>
-        <button onclick="closeModal('categoryModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-
-      <!-- Form Tambah Kategori Baru -->
-      <form id="addCategoryForm" class="flex gap-2 mb-5">
-        <input 
-          type="text" 
-          id="newCategoryName" 
-          required 
-          placeholder="Nama kategori baru..."
-          class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 transition-all"
-        />
-        <button 
-          type="submit" 
-          id="addCatBtn"
-          class="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all active:scale-95 shrink-0"
-        >
-          Tambah
-        </button>
-      </form>
-
-      <!-- Daftar Kategori -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-md p-5 sm:p-6 shadow-2xl modal-card scale-95 opacity-0 max-h-[92dvh] overflow-y-auto">
+      <div class="flex items-center justify-between mb-4"><h2 class="text-base font-semibold text-white">Kelola Kategori</h2><button onclick="closeModal('categoryModal')" class="text-zinc-500 hover:text-zinc-300 transition-colors p-1" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+      <form id="addCategoryForm" class="flex gap-2 mb-5"><input type="text" id="newCategoryName" required placeholder="Nama kategori" class="flex-1 bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 transition-colors" /><button type="submit" id="addCatBtn" class="px-4 py-2 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950 transition-all active:scale-95 shrink-0">Tambah</button></form>
       <div id="categoryManagerList" class="space-y-2 max-h-64 overflow-y-auto pr-1"></div>
+      <div class="mt-5 pt-4 border-t border-zinc-800/80"><p class="text-[10px] tracking-[0.14em] uppercase text-zinc-500 px-1 pb-2">Backup</p><div class="flex gap-2"><button onclick="exportBackup()" class="flex-1 px-3 py-2 rounded-xl text-[13px] font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors">Export JSON</button><button onclick="document.getElementById('importFileInput').click()" class="flex-1 px-3 py-2 rounded-xl text-[13px] font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200 transition-colors">Import JSON</button><input type="file" id="importFileInput" accept=".json,application/json" class="hidden" onchange="handleImportFile(event)" /></div><p class="text-[11px] text-zinc-500 px-1 pt-2">Export berisi semua kategori + project. Import akan menambahkan yang belum ada.</p></div>
     </div>
   </div>
-
-  <!-- MODAL KONFIRMASI BUKA LINK -->
   <div id="openLinkModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
-    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl modal-card scale-95 opacity-0">
-      <div class="flex items-start justify-between gap-3 mb-4">
-        <div>
-          <p class="text-[10px] uppercase tracking-[0.18em] text-emerald-400 font-semibold mb-1">Open external link</p>
-          <h2 id="openLinkTitle" class="text-base font-semibold text-white">Nama project</h2>
-        </div>
-        <button onclick="closeModal('openLinkModal')" class="text-zinc-500 hover:text-zinc-300 p-1" aria-label="Tutup">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <p id="openLinkDescription" class="text-sm text-zinc-400 mb-3"></p>
-      <div class="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 mb-5">
-        <p class="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Destination</p>
-        <p id="openLinkDomain" class="text-xs text-emerald-300 font-mono break-all"></p>
-      </div>
-      <div class="flex justify-end gap-2">
-        <button onclick="closeModal('openLinkModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800">Batal</button>
-        <button onclick="confirmOpenLink()" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950">Buka Link</button>
-      </div>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl modal-card scale-95 opacity-0 max-h-[92dvh] overflow-y-auto">
+      <div class="flex items-start justify-between gap-3 mb-4"><div class="min-w-0"><p class="text-[10px] uppercase tracking-[0.18em] text-emerald-400 font-semibold mb-1">Open external link</p><h2 id="openLinkTitle" class="text-base font-semibold text-white truncate">Nama project</h2></div><button onclick="closeModal('openLinkModal')" class="text-zinc-500 hover:text-zinc-300 p-1 shrink-0" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div>
+      <p id="openLinkDescription" class="text-sm text-zinc-400 mb-3"></p><div class="rounded-xl bg-zinc-950 border border-zinc-800 px-3 py-2.5 mb-5"><p class="text-[10px] text-zinc-500 uppercase tracking-wider mb-1">Destination</p><p id="openLinkDomain" class="text-xs text-emerald-300 font-mono break-all"></p></div>
+      <div class="flex justify-end gap-2"><button onclick="closeModal('openLinkModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800">Batal</button><button onclick="copyPendingLink()" class="px-4 py-2.5 rounded-xl text-sm font-medium bg-zinc-800 hover:bg-zinc-700 text-zinc-200">Salin Link</button><button onclick="confirmOpenLink()" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950">Buka Link</button></div>
     </div>
   </div>
-
-  <!-- TOAST NOTIFICATION -->
-  <div id="toast" class="fixed bottom-5 right-5 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
-    <div class="px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 shadow-xl flex items-center gap-2.5">
-      <span id="toastIcon"></span>
-      <span id="toastMessage"></span>
-    </div>
+  <div id="deleteLinkModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl modal-card scale-95 opacity-0"><h2 class="text-base font-semibold text-white mb-2">Hapus project?</h2><p class="text-sm text-zinc-400 mb-5">Project <span id="deleteLinkTitle" class="text-zinc-100 font-medium"></span> akan dihapus permanen.</p><div class="flex justify-end gap-2"><button onclick="closeModal('deleteLinkModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800">Batal</button><button onclick="confirmDeleteLink()" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-rose-500 hover:bg-rose-400 text-white">Hapus</button></div></div>
   </div>
-
+  <div id="deleteCategoryModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl modal-card scale-95 opacity-0"><h2 class="text-base font-semibold text-white mb-2">Hapus kategori?</h2><p class="text-sm text-zinc-400 mb-1">Kategori <span id="deleteCategoryName" class="text-zinc-100 font-medium"></span> akan dihapus.</p><p class="text-xs text-zinc-500 mb-5">Project di dalamnya tidak terhapus, hanya jadi Tanpa Kategori.</p><div class="flex justify-end gap-2"><button onclick="closeModal('deleteCategoryModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800">Batal</button><button onclick="confirmDeleteCategory()" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-rose-500 hover:bg-rose-400 text-white">Hapus</button></div></div>
+  </div>
+  <div id="renameCategoryModal" class="fixed inset-0 z-50 hidden items-center justify-center p-4 bg-black/70 backdrop-blur-sm modal-backdrop opacity-0">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 sm:p-6 shadow-2xl modal-card scale-95 opacity-0"><div class="flex items-center justify-between mb-4"><h2 class="text-base font-semibold text-white">Ubah Nama Kategori</h2><button onclick="closeModal('renameCategoryModal')" class="text-zinc-500 hover:text-zinc-300 p-1" aria-label="Tutup"><svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button></div><form id="renameCategoryForm" class="space-y-4"><input type="hidden" id="renameCategoryId" /><input type="text" id="renameCategoryInput" required placeholder="Nama kategori" class="w-full bg-zinc-950 border border-zinc-800 rounded-xl px-3.5 py-2.5 text-sm text-white placeholder-zinc-600 focus:outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20" /><div class="flex justify-end gap-2"><button type="button" onclick="closeModal('renameCategoryModal')" class="px-4 py-2.5 rounded-xl text-sm font-medium text-zinc-400 hover:text-white hover:bg-zinc-800">Batal</button><button type="submit" class="px-5 py-2.5 rounded-xl text-sm font-semibold bg-emerald-500 hover:bg-emerald-400 text-zinc-950">Simpan</button></div></form></div>
+  </div>
+  <div id="toast" class="fixed bottom-5 left-4 right-4 mx-auto sm:left-auto sm:right-5 sm:mx-0 z-[60] translate-y-20 opacity-0 transition-all duration-300 pointer-events-none max-w-sm sm:w-auto">
+    <div class="relative overflow-hidden px-4 py-3 rounded-xl bg-zinc-900 border border-zinc-700 text-sm text-zinc-100 shadow-xl flex items-center gap-2.5 pointer-events-auto"><span id="toastIcon" class="shrink-0"></span><span id="toastMessage" class="flex-1 min-w-0"></span><button onclick="hideToast()" class="text-zinc-500 hover:text-zinc-200 shrink-0 p-0.5" aria-label="Tutup notifikasi"><svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg></button><div id="toastProgress" class="absolute bottom-0 left-0 h-[2px] bg-emerald-400 w-full"></div></div>
+  </div>
   <script src="page.js"></script>
 </body>
 </html>
