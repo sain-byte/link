@@ -1,0 +1,349 @@
+{
+  "entities": {
+    "Project": {
+      "title": "Project",
+      "description": "Public project link card displayed on the home page and managed in the developer dashboard.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120,
+          "description": "Project display title"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500,
+          "description": "Short project description"
+        },
+        "url": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 500,
+          "pattern": "^https?://.+",
+          "description": "Target project URL"
+        },
+        "category": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Project category name"
+        },
+        "favorite": {
+          "type": "boolean",
+          "description": "Whether project is marked as favorite by admin"
+        },
+        "hidden": {
+          "type": "boolean",
+          "description": "Whether project is hidden from public visitors"
+        },
+        "clicks": {
+          "type": "integer",
+          "description": "Total click count"
+        },
+        "order": {
+          "type": "integer",
+          "description": "Sort order index for drag-and-drop reordering"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp"
+        }
+      },
+      "required": ["title", "description", "url", "category", "clicks", "order", "createdAt", "updatedAt"]
+    },
+    "Comment": {
+      "title": "Comment",
+      "description": "Global public comment with optional name, quote reply, likes, and admin pin status.",
+      "type": "object",
+      "properties": {
+        "clientId": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "Client-generated ID for optimistic deduplication"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 40,
+          "description": "Display name (defaults to Anonim)"
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 1000,
+          "description": "Comment message body"
+        },
+        "replyToId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 128,
+          "description": "Parent comment ID if replying"
+        },
+        "replyToName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 40,
+          "description": "Quoted author name"
+        },
+        "replyToMessage": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 300,
+          "description": "Quoted message excerpt"
+        },
+        "likes": {
+          "type": "integer",
+          "description": "Total likes count"
+        },
+        "pinned": {
+          "type": "boolean",
+          "description": "Whether comment is pinned by admin"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": ["clientId", "name", "message", "replyToId", "replyToName", "replyToMessage", "likes", "pinned", "createdAt"]
+    },
+    "VisitStats": {
+      "title": "VisitStats",
+      "description": "Aggregate public visitor counter document.",
+      "type": "object",
+      "properties": {
+        "total": {
+          "type": "integer",
+          "description": "All-time visit count"
+        },
+        "today": {
+          "type": "integer",
+          "description": "Today's visit count"
+        },
+        "lastVisit": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Date key YYYY-MM-DD of the most recent visit"
+        }
+      },
+      "required": ["total", "today", "lastVisit"]
+    },
+    "DailyAnalytic": {
+      "title": "DailyAnalytic",
+      "description": "Private per-day visit and click counts for developer analytics.",
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$",
+          "description": "Date key YYYY-MM-DD"
+        },
+        "visits": {
+          "type": "integer",
+          "description": "Total visits on this day"
+        },
+        "clicks": {
+          "type": "integer",
+          "description": "Total project clicks on this day"
+        }
+      },
+      "required": ["date", "visits", "clicks"]
+    },
+    "CustomCollection": {
+      "title": "CustomCollection",
+      "description": "Private developer-defined custom database table metadata.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Collection name"
+        },
+        "description": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 300,
+          "description": "Optional description"
+        },
+        "fields": {
+          "type": "array",
+          "description": "Column definitions for this custom collection"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": ["name", "description", "fields", "createdAt"]
+    },
+    "CustomCollectionItem": {
+      "title": "CustomCollectionItem",
+      "description": "Row inside a private custom collection.",
+      "type": "object",
+      "properties": {
+        "data": {
+          "type": "object",
+          "description": "Dynamic column key-value map"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server last update timestamp"
+        }
+      },
+      "required": ["data", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Admin-defined project category name.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 60,
+          "description": "Category display name"
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Server creation timestamp"
+        }
+      },
+      "required": ["name", "createdAt"]
+    },
+    "VaultItem": {
+      "title": "VaultItem",
+      "description": "Private personal digital vault item storing scripts, notes, reminders, credentials, links, contacts, or Firebase Storage file references.",
+      "type": "object",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["code", "note", "reminder", "doc", "vault", "media", "link", "contact"],
+          "description": "Vault item category type"
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160,
+          "description": "Item display title"
+        },
+        "tags": {
+          "type": "array",
+          "description": "Searchable tags for the vault item"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 50000,
+          "description": "Code snippet, note text, secret value, URL, contact details, or file metadata"
+        },
+        "dueDate": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 64,
+          "description": "Optional reminder due date string"
+        },
+        "done": {
+          "type": "boolean",
+          "description": "Completion flag used primarily by reminder items"
+        },
+        "storagePath": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 500,
+          "description": "Optional legacy Firebase Storage object path for doc and media items"
+        },
+        "downloadUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000,
+          "description": "Optional legacy download URL"
+        },
+        "driveFileId": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 256,
+          "description": "Optional Google Drive file ID for private Vault uploads"
+        },
+        "driveViewUrl": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 2000,
+          "description": "Optional Google Drive webViewLink URL"
+        },
+        "fileName": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 260,
+          "description": "Optional original filename for uploaded Drive or storage files"
+        },
+        "fileSize": {
+          "type": "integer",
+          "description": "Optional file size in bytes"
+        },
+        "mimeType": {
+          "type": "string",
+          "minLength": 0,
+          "maxLength": 160,
+          "description": "Optional MIME type for uploaded files"
+        },
+        "createdAt": {
+          "type": "integer",
+          "description": "Creation timestamp in Unix milliseconds"
+        }
+      },
+      "required": ["type", "title", "tags", "content", "done", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/projects/{projectId}": {
+      "schema": { "$ref": "#/entities/Project" },
+      "description": "Publicly readable project links; admin-only writes except public +1 click increment."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Publicly readable project categories managed by admin."
+    },
+    "/comments/{commentId}": {
+      "schema": { "$ref": "#/entities/Comment" },
+      "description": "Publicly readable global chatbox comments; visitors may create or toggle likes; admin may pin or delete."
+    },
+    "/visits/{docId}": {
+      "schema": { "$ref": "#/entities/VisitStats" },
+      "description": "Public visit counter stored at /visits/stats."
+    },
+    "/analytics/{dayId}": {
+      "schema": { "$ref": "#/entities/DailyAnalytic" },
+      "description": "Private daily analytics readable only by owner; public may increment today's counter by +1."
+    },
+    "/customCollections/{collectionId}": {
+      "schema": { "$ref": "#/entities/CustomCollection" },
+      "description": "Private custom database collections readable and writable only by owner."
+    },
+    "/customCollections/{collectionId}/items/{itemId}": {
+      "schema": { "$ref": "#/entities/CustomCollectionItem" },
+      "description": "Private rows within a custom collection readable and writable only by owner."
+    },
+    "/vault/{itemId}": {
+      "schema": { "$ref": "#/entities/VaultItem" },
+      "description": "Private personal digital vault items readable and writable only by the verified owner."
+    }
+  }
+}

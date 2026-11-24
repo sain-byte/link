@@ -1,0 +1,308 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidDateKey(dayId) {
+      return dayId is string && dayId.size() == 10 && dayId.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$');
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner() {
+      return isSignedIn()
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() == 'sainbyte@gmail.com';
+    }
+
+    function isValidProject(data) {
+      return data.keys().hasAll(['title', 'description', 'url', 'category', 'clicks', 'order', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['title', 'description', 'url', 'category', 'favorite', 'hidden', 'clicks', 'order', 'createdAt', 'updatedAt'])
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 120
+        && data.description is string && data.description.size() <= 500
+        && data.url is string && data.url.size() >= 1 && data.url.size() <= 500 && data.url.matches('^https?://.+')
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 60
+        && (!('favorite' in data) || data.favorite is bool)
+        && (!('hidden' in data) || data.hidden is bool)
+        && data.clicks is int && data.clicks >= 0
+        && data.order is int && data.order >= 0
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['name', 'createdAt'])
+        && data.keys().hasOnly(['name', 'createdAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 60
+        && data.createdAt is timestamp;
+    }
+
+    function isValidComment(data) {
+      return data.keys().hasAll(['clientId', 'name', 'message', 'replyToId', 'replyToName', 'replyToMessage', 'likes', 'pinned', 'createdAt'])
+        && data.keys().hasOnly(['clientId', 'name', 'message', 'replyToId', 'replyToName', 'replyToMessage', 'likes', 'pinned', 'createdAt'])
+        && data.clientId is string && data.clientId.size() >= 1 && data.clientId.size() <= 80
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 40
+        && data.message is string && data.message.size() >= 1 && data.message.size() <= 1000
+        && data.replyToId is string && data.replyToId.size() <= 128
+        && data.replyToName is string && data.replyToName.size() <= 40
+        && data.replyToMessage is string && data.replyToMessage.size() <= 300
+        && data.likes is int && data.likes >= 0
+        && data.pinned is bool
+        && data.createdAt is timestamp;
+    }
+
+    function isValidVisitStats(data) {
+      return data.keys().hasAll(['total', 'today', 'lastVisit'])
+        && data.keys().hasOnly(['total', 'today', 'lastVisit'])
+        && data.total is int && data.total >= 0
+        && data.today is int && data.today >= 0
+        && isValidDateKey(data.lastVisit);
+    }
+
+    function isValidAnalytics(data) {
+      return data.keys().hasAll(['date', 'visits', 'clicks'])
+        && data.keys().hasOnly(['date', 'visits', 'clicks'])
+        && isValidDateKey(data.date)
+        && data.visits is int && data.visits >= 0
+        && data.clicks is int && data.clicks >= 0;
+    }
+
+    function isValidCustomCollection(data) {
+      return data.keys().hasAll(['name', 'description', 'fields', 'createdAt'])
+        && data.keys().hasOnly(['name', 'description', 'fields', 'createdAt'])
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 60
+        && data.description is string && data.description.size() <= 300
+        && data.fields is list && data.fields.size() >= 1 && data.fields.size() <= 25
+        && data.fields[0] is map
+        && data.createdAt is timestamp;
+    }
+
+    function isValidCustomItem(data) {
+      return data.keys().hasAll(['data', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly(['data', 'createdAt', 'updatedAt'])
+        && data.data is map
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    function isValidVaultType(t) {
+      return t in ['code', 'note', 'reminder', 'doc', 'vault', 'media', 'link', 'contact'];
+    }
+
+    function isValidVaultItem(data) {
+      return data.keys().hasAll(['type', 'title', 'tags', 'content', 'done', 'createdAt'])
+        && data.keys().hasOnly(['type', 'title', 'tags', 'content', 'dueDate', 'done', 'storagePath', 'downloadUrl', 'driveFileId', 'driveViewUrl', 'fileName', 'fileSize', 'mimeType', 'createdAt'])
+        && isValidVaultType(data.type)
+        && data.title is string && data.title.size() >= 1 && data.title.size() <= 160
+        && data.tags is list && data.tags.size() <= 15
+        && (data.tags.size() == 0 || (data.tags[0] is string && data.tags[0].size() <= 40))
+        && data.content is string && data.content.size() <= 50000
+        && data.done is bool
+        && data.createdAt is int && data.createdAt > 0
+        && (!('dueDate' in data) || (data.dueDate is string && data.dueDate.size() <= 64))
+        && (!('storagePath' in data) || (data.storagePath is string && data.storagePath.size() <= 500))
+        && (!('downloadUrl' in data) || (data.downloadUrl is string && data.downloadUrl.size() <= 2000 && (data.downloadUrl == '' || data.downloadUrl.matches('^https?://.+'))))
+        && (!('driveFileId' in data) || (data.driveFileId is string && data.driveFileId.size() <= 256))
+        && (!('driveViewUrl' in data) || (data.driveViewUrl is string && data.driveViewUrl.size() <= 2000 && (data.driveViewUrl == '' || data.driveViewUrl.matches('^https?://.+'))))
+        && (!('fileName' in data) || (data.fileName is string && data.fileName.size() <= 260))
+        && (!('fileSize' in data) || (data.fileSize is int && data.fileSize >= 0))
+        && (!('mimeType' in data) || (data.mimeType is string && data.mimeType.size() <= 160));
+    }
+
+    // Connection health check
+    match /test/connection {
+      allow get: if true;
+    }
+
+    // Public projects collection
+    match /projects/{projectId} {
+      allow list: if true;
+      allow get: if isValidId(projectId);
+      allow create: if isValidId(projectId)
+        && isOwner()
+        && isValidProject(incoming())
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time
+        && incoming().clicks >= 0;
+      allow update: if isValidId(projectId)
+        && isValidProject(incoming())
+        && incoming().createdAt == existing().createdAt
+        && (
+          (
+            isOwner()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['title', 'description', 'url', 'category', 'favorite', 'hidden', 'order', 'updatedAt'])
+            && (incoming().updatedAt == request.time || incoming().updatedAt == existing().updatedAt)
+          ) || (
+            incoming().diff(existing()).affectedKeys().hasOnly(['clicks'])
+            && incoming().clicks == existing().clicks + 1
+          )
+        );
+      allow delete: if isValidId(projectId) && isOwner();
+    }
+
+    // Public project categories managed by admin
+    match /categories/{categoryId} {
+      allow list: if true;
+      allow get: if isValidId(categoryId);
+      allow create: if isValidId(categoryId)
+        && isOwner()
+        && isValidCategory(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(categoryId)
+        && isOwner()
+        && isValidCategory(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name']);
+      allow delete: if isValidId(categoryId) && isOwner();
+    }
+
+    // Public global chatbox comments
+    match /comments/{commentId} {
+      allow list: if true;
+      allow get: if isValidId(commentId);
+      allow create: if isValidId(commentId)
+        && isValidComment(incoming())
+        && incoming().likes == 0
+        && incoming().pinned == false
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(commentId)
+        && isValidComment(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().clientId == existing().clientId
+        && (
+          (
+            isOwner()
+            && incoming().diff(existing()).affectedKeys().hasOnly(['pinned'])
+          ) || (
+            incoming().diff(existing()).affectedKeys().hasOnly(['likes'])
+            && (
+              incoming().likes == existing().likes + 1
+              || (existing().likes > 0 && incoming().likes == existing().likes - 1)
+            )
+          )
+        );
+      allow delete: if isValidId(commentId) && isOwner();
+    }
+
+    // Public visit counter at /visits/stats
+    match /visits/{docId} {
+      allow get: if docId == 'stats';
+      allow list: if isOwner();
+      allow create: if docId == 'stats'
+        && isValidVisitStats(incoming())
+        && incoming().total == 1
+        && incoming().today == 1;
+      allow update: if docId == 'stats'
+        && isValidVisitStats(incoming())
+        && incoming().diff(existing()).affectedKeys().hasOnly(['total', 'today', 'lastVisit'])
+        && incoming().total == existing().total + 1
+        && (
+          (incoming().lastVisit == existing().lastVisit && incoming().today == existing().today + 1)
+          || (incoming().lastVisit != existing().lastVisit && incoming().today == 1)
+        );
+      allow delete: if isValidId(docId) && isOwner();
+    }
+
+    // Private daily analytics (owner only for reads; public may increment today's visits/clicks by +1)
+    match /analytics/{dayId} {
+      allow get: if isValidDateKey(dayId) && isOwner();
+      allow list: if isOwner();
+      allow create: if isValidDateKey(dayId)
+        && isValidAnalytics(incoming())
+        && incoming().date == dayId
+        && (
+          (incoming().visits == 1 && incoming().clicks == 0)
+          || (incoming().visits == 0 && incoming().clicks == 1)
+        );
+      allow update: if isValidDateKey(dayId)
+        && isValidAnalytics(incoming())
+        && incoming().date == existing().date
+        && incoming().diff(existing()).affectedKeys().hasOnly(['visits', 'clicks', 'date'])
+        && (
+          isOwner()
+          || (incoming().visits == existing().visits + 1 && incoming().clicks == existing().clicks)
+          || (incoming().clicks == existing().clicks + 1 && incoming().visits == existing().visits)
+        );
+      allow delete: if isValidDateKey(dayId) && isOwner();
+    }
+
+    // Private developer custom collections
+    match /customCollections/{collectionId} {
+      allow list: if isOwner();
+      allow get: if isValidId(collectionId) && isOwner();
+      allow create: if isValidId(collectionId)
+        && isOwner()
+        && isValidCustomCollection(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(collectionId)
+        && isOwner()
+        && isValidCustomCollection(incoming())
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['name', 'description', 'fields']);
+      allow delete: if isValidId(collectionId) && isOwner();
+
+      match /items/{itemId} {
+        allow list: if isValidId(collectionId) && isOwner();
+        allow get: if isValidId(collectionId)
+          && isValidId(itemId)
+          && isOwner()
+          && exists(/databases/$(database)/documents/customCollections/$(collectionId));
+        allow create: if isValidId(collectionId)
+          && isValidId(itemId)
+          && isOwner()
+          && exists(/databases/$(database)/documents/customCollections/$(collectionId))
+          && isValidCustomItem(incoming())
+          && incoming().createdAt == request.time
+          && incoming().updatedAt == request.time;
+        allow update: if isValidId(collectionId)
+          && isValidId(itemId)
+          && isOwner()
+          && exists(/databases/$(database)/documents/customCollections/$(collectionId))
+          && isValidCustomItem(incoming())
+          && incoming().createdAt == existing().createdAt
+          && incoming().updatedAt == request.time
+          && incoming().diff(existing()).affectedKeys().hasOnly(['data', 'updatedAt']);
+        allow delete: if isValidId(collectionId)
+          && isValidId(itemId)
+          && isOwner()
+          && exists(/databases/$(database)/documents/customCollections/$(collectionId));
+      }
+    }
+
+    // Private personal digital vault (/vault/)
+    match /vault/{itemId} {
+      allow list: if isOwner();
+      allow get: if isValidId(itemId) && isOwner();
+      allow create: if isValidId(itemId)
+        && isOwner()
+        && isValidVaultItem(incoming());
+      allow update: if isValidId(itemId)
+        && isOwner()
+        && isValidVaultItem(incoming())
+        && incoming().createdAt == existing().createdAt
+        && (
+          incoming().diff(existing()).affectedKeys().hasOnly(['done'])
+          || incoming().diff(existing()).affectedKeys().hasOnly(['type', 'title', 'tags', 'content', 'dueDate', 'done', 'storagePath', 'downloadUrl', 'driveFileId', 'driveViewUrl', 'fileName', 'fileSize', 'mimeType'])
+        );
+      allow delete: if isValidId(itemId) && isOwner();
+    }
+  }
+}

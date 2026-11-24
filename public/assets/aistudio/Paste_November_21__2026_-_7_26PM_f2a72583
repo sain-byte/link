@@ -1,0 +1,2738 @@
+# Untitled prompt
+
+---
+
+## You
+
+Copy dari sini:
+Build a web app called sainbyte using React + Vite + Tailwind + Firebase (Firestore + Auth).
+
+No GAS, no Google Sheets. All data from Firestore. Start with EMPTY database, no dummy data, no placeholder, no demo content. Empty state must show "Belum ada data" with a button to add new.
+
+Tech & Deploy:
+- Frontend will be pushed to GitHub and deployed to Vercel. Use environment variables for Firebase config.
+- Use Firebase Firestore for database, Firebase Auth for login.
+- Use React Router with 2 routes: / and /developer.
+
+Route 1: / - Public Decoy Page
+This is the home page that looks like a simple project list. Keep it clean and innocent.
+- Header text: sainbyte, subheader: dashboard list project. No logo icon, no favicon, no icon box.
+- List of project links in card layout. Each card: title, description, URL, category, click count, last updated.
+- Features: search, filter by category, category totals, add/edit/delete link (admin only, with password/PIN prompt), drag-drop reorder, export/import JSON, copy link button.
+- Global chatbox at bottom: visitors can comment with free optional name, animated emotes, reply to comment with quote, like comment, admin can pin 1 comment and delete comment. Show optimistic sending animation, do not wait for server to show bubble.
+- Visit counter at footer with count-up animation.
+- Design rules: mobile content width is 80% centered, no horizontal scroll, pinch zoom must work. All popups/modals must be centered, not bottom sheet. Support mobile site and desktop site mode.
+- Themes: dark/light + other accent colors (green, blue, purple, orange). Auto follow system theme, manual choice wins. Fix light theme: no black text on black background.
+- PWA installable.
+
+Hidden Trigger:
+- Tapping the sainbyte header logo 5 times quickly navigates to /developer. No visible button to developer page.
+
+Route 2: /developer - Real Private Dashboard
+This is the real dashboard, UI must look TOTALLY different from /. Dense, admin panel style, sidebar layout on desktop, bottom nav on mobile. Dark theme by default.
+- Must NOT be indexed by search engines. Add noindex.
+- If not logged in, show only login page. Login with Google and Email. No data is visible before login.
+- After login, show: Overview stats (total projects, total visits, total clicks, total comments), Projects table (full CRUD with search, sort, filter), Comments moderation table, Visits & Clicks analytics (simple chart/table per day).
+- Add a generic Database section: user can create custom collections (like Notes, Finance, Todo) from scratch, each collection has its own table with add/edit/delete, search, filter. This is for future personal data.
+- All developer data is private. Firestore rules: public can only read public projects/comments on /. Developer collections can only be read/written by logged-in owner.
+
+Firestore Collections (start empty):
+- projects: title, description, url, category, clicks, createdAt, updatedAt
+- comments: name, message, replyToId, replyToName, replyToMessage, likes, pinned, createdAt
+- visits: total, today, lastVisit
+- customCollections: for generic database in developer page
+
+General Rules:
+- All UI text in Bahasa Indonesia.
+- No placeholder data, no lorem ipsum.
+- Smooth animations, no laggy transitions.
+- Mobile first, must work perfectly on Android browser.
+
+---
+
+## AI Studio
+
+Berikut adalah implementasi lengkap dan siap pakai untuk web app **sainbyte** menggunakan **React + Vite + Tailwind CSS + Firebase (Firestore + Auth)** yang siap di-push ke GitHub dan dideploy ke Vercel.
+
+---
+
+### Struktur Proyek
+
+```text
+sainbyte/
+├── public/
+│   ├── manifest.webmanifest
+│   ├── sw.js
+│   ├── pwa-192.png          (buat gambar polos 192x192 untuk syarat install PWA)
+│   └── pwa-512.png          (buat gambar polos 512x512 untuk syarat install PWA)
+├── src/
+│   ├── components/
+│   │   ├── ChatBox.jsx
+│   │   ├── Modal.jsx
+│   │   ├── Toast.jsx
+│   │   └── VisitCounter.jsx
+│   ├── context/
+│   │   ├── AuthContext.jsx
+│   │   └── ThemeContext.jsx
+│   ├── pages/
+│   │   ├── DeveloperPage.jsx
+│   │   └── PublicPage.jsx
+│   ├── utils/
+│   │   └── format.js
+│   ├── App.jsx
+│   ├── firebase.js
+│   ├── index.css
+│   └── main.jsx
+├── .env.example
+├── .gitignore
+├── firestore.rules
+├── index.html
+├── package.json
+├── postcss.config.js
+├── tailwind.config.js
+├── vercel.json
+└── vite.config.js
+```
+
+---
+
+### 1. Konfigurasi Root & Environment
+
+#### `package.json`
+```json
+{
+  "name": "sainbyte",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "firebase": "^11.0.2",
+    "lucide-react": "^0.460.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "autoprefixer": "^10.4.20",
+    "postcss": "^8.4.49",
+    "tailwindcss": "^3.4.15",
+    "vite": "^6.0.1"
+  }
+}
+```
+
+#### `.env.example`
+```env
+VITE_FIREBASE_API_KEY=
+VITE_FIREBASE_AUTH_DOMAIN=
+VITE_FIREBASE_PROJECT_ID=
+VITE_FIREBASE_STORAGE_BUCKET=
+VITE_FIREBASE_MESSAGING_SENDER_ID=
+VITE_FIREBASE_APP_ID=
+VITE_ADMIN_PIN=
+VITE_OWNER_EMAIL=
+```
+
+#### `.gitignore`
+```gitignore
+node_modules
+dist
+.env
+.env.local
+.DS_Store
+```
+
+#### `vercel.json`
+Mengatur SPA rewrite agar route `/developer` tidak 404 saat di-refresh, serta memblokir indexing mesin pencari pada `/developer`.
+```json
+{
+  "rewrites": [
+    { "source": "/(.*)", "destination": "/index.html" }
+  ],
+  "headers": [
+    {
+      "source": "/developer",
+      "headers": [
+        { "key": "X-Robots-Tag", "value": "noindex, nofollow, noarchive" }
+      ]
+    }
+  ]
+}
+```
+
+#### `vite.config.js`
+```js
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+
+export default defineConfig({
+  plugins: [react()]
+});
+```
+
+#### `tailwind.config.js`
+```js
+/** @type {import('tailwindcss').Config} */
+export default {
+  darkMode: 'class',
+  content: ['./index.html', './src/**/*.{js,jsx}'],
+  theme: {
+    extend: {
+      keyframes: {
+        fadeInUp: {
+          '0%': { opacity: '0', transform: 'translateY(8px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' }
+        },
+        emoteFloat: {
+          '0%, 100%': { transform: 'translateY(0) scale(1)' },
+          '50%': { transform: 'translateY(-3px) scale(1.12)' }
+        }
+      },
+      animation: {
+        'fade-in-up': 'fadeInUp 0.22s ease-out forwards',
+        'emote-float': 'emoteFloat 1.8s ease-in-out infinite'
+      }
+    }
+  },
+  plugins: []
+};
+```
+
+#### `postcss.config.js`
+```js
+export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {}
+  }
+};
+```
+
+#### `index.html`
+Tanpa `<link rel="icon">` (tidak ada favicon), mendukung pinch-zoom (`width=device-width, initial-scale=1.0` tanpa `user-scalable=no`).
+```html
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f172a" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>sainbyte</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+```
+
+---
+
+### 2. PWA Files (`public/`)
+
+#### `public/manifest.webmanifest`
+```json
+{
+  "name": "sainbyte",
+  "short_name": "sainbyte",
+  "description": "dashboard list project",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "icons": [
+    {
+      "src": "/pwa-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/pwa-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
+```
+> **Catatan PWA:** Browser Android mewajibkan adanya file `/pwa-192.png` dan `/pwa-512.png` agar prompt instalasi PWA aktif. Letakkan 2 file PNG polos di folder `public/` (tidak akan tampil di header maupun sebagai favicon karena tidak ada tag `<link rel="icon">`).
+
+#### `public/sw.js`
+```js
+const CACHE_NAME = 'sainbyte-v1';
+const APP_SHELL = ['/', '/index.html', '/manifest.webmanifest'];
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(APP_SHELL))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(
+        keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
+      )
+    )
+  );
+  self.clients.claim();
+});
+
+self.addEventListener('fetch', (event) => {
+  if (event.request.method !== 'GET') return;
+  const url = new URL(event.request.url);
+  if (url.origin !== self.location.origin) return;
+
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        const clone = response.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, clone));
+        return response;
+      })
+      .catch(() => caches.match(event.request).then((cached) => cached || caches.match('/index.html')))
+  );
+});
+```
+
+---
+
+### 3. Firebase & Firestore Security Rules
+
+#### `firestore.rules`
+Ganti `OWNER_EMAIL_ANDA@gmail.com` dengan email akun Firebase Auth pemilik yang sama dengan `VITE_OWNER_EMAIL`.
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email == 'OWNER_EMAIL_ANDA@gmail.com';
+    }
+
+    // Koleksi publik proyek
+    match /projects/{projectId} {
+      allow read: if true;
+      allow create, delete: if isOwner();
+      // Publik hanya boleh menaikkan click count (+1), admin boleh mengubah semua field
+      allow update: if isOwner() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['clicks'])
+        && request.resource.data.clicks == resource.data.clicks + 1
+      );
+    }
+
+    // Koleksi publik komentar global
+    match /comments/{commentId} {
+      allow read: if true;
+      allow create: if request.resource.data.keys().hasAll(['name', 'message', 'likes', 'pinned', 'createdAt'])
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.likes == 0
+        && request.resource.data.pinned == false;
+      // Publik hanya boleh like (+1 / -1), admin boleh pin atau edit
+      allow update: if isOwner() || (
+        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+        && (
+          request.resource.data.likes == resource.data.likes + 1 ||
+          request.resource.data.likes == resource.data.likes - 1
+        )
+      );
+      allow delete: if isOwner();
+    }
+
+    // Statistik kunjungan publik (dokumen 'stats')
+    match /visits/{docId} {
+      allow read: if true;
+      allow create, update: if docId == 'stats'
+        && request.resource.data.keys().hasAll(['total', 'today', 'lastVisit']);
+      allow delete: if isOwner();
+    }
+
+    // Analitik harian (total kunjungan & klik per hari)
+    match /analytics/{dayId} {
+      allow read: if isOwner();
+      allow create, update: if request.resource.data.keys().hasAll(['date', 'visits', 'clicks']);
+      allow delete: if isOwner();
+    }
+
+    // Koleksi pribadi developer (hanya pemilik yang login)
+    match /customCollections/{collectionId} {
+      allow read, write: if isOwner();
+
+      match /items/{itemId} {
+        allow read, write: if isOwner();
+      }
+    }
+  }
+}
+```
+> **Catatan Penting:** Jika login email/password diaktifkan tanpa verifikasi email, sesuaikan baris `email_verified == true` atau pastikan email pemilik sudah terverifikasi. Untuk Google Login, `email_verified` otomatis `true`.
+
+#### `src/firebase.js`
+```js
+import { initializeApp } from 'firebase/app';
+import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
+
+const firebaseConfig = {
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID
+};
+
+const app = initializeApp(firebaseConfig);
+export const auth = getAuth(app);
+export const googleProvider = new GoogleAuthProvider();
+export const db = getFirestore(app);
+```
+
+---
+
+### 4. Styles, Contexts & Utilities
+
+#### `src/index.css`
+Mengatur tema terang/gelap, 4 warna aksen (hijau, biru, ungu, oranye), animasi emote, dan mencegah horizontal scroll.
+```css
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --accent-soft: rgba(16, 185, 129, 0.14);
+  --accent-text: #047857;
+}
+
+.dark {
+  --accent-text: #34d399;
+}
+
+[data-accent='green'] {
+  --accent: #10b981;
+  --accent-hover: #059669;
+  --accent-soft: rgba(16, 185, 129, 0.14);
+  --accent-text: #047857;
+}
+.dark[data-accent='green'] {
+  --accent-text: #34d399;
+}
+
+[data-accent='blue'] {
+  --accent: #3b82f6;
+  --accent-hover: #2563eb;
+  --accent-soft: rgba(59, 130, 246, 0.14);
+  --accent-text: #1d4ed8;
+}
+.dark[data-accent='blue'] {
+  --accent-text: #60a5fa;
+}
+
+[data-accent='purple'] {
+  --accent: #8b5cf6;
+  --accent-hover: #7c3aed;
+  --accent-soft: rgba(139, 92, 246, 0.14);
+  --accent-text: #6d28d9;
+}
+.dark[data-accent='purple'] {
+  --accent-text: #a78bfa;
+}
+
+[data-accent='orange'] {
+  --accent: #f97316;
+  --accent-hover: #ea580c;
+  --accent-soft: rgba(249, 115, 22, 0.14);
+  --accent-text: #c2410c;
+}
+.dark[data-accent='orange'] {
+  --accent-text: #fb923c;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  max-width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.accent-bg {
+  background-color: var(--accent);
+}
+.accent-bg:hover {
+  background-color: var(--accent-hover);
+}
+.accent-soft-bg {
+  background-color: var(--accent-soft);
+}
+.accent-text {
+  color: var(--accent-text);
+}
+.accent-border {
+  border-color: var(--accent);
+}
+.accent-ring:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+@keyframes popIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.95) translateY(6px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-pop-in {
+  animation: popIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes bounceEmote {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  30% {
+    transform: translateY(-4px) rotate(-6deg);
+  }
+  60% {
+    transform: translateY(0) rotate(6deg);
+  }
+}
+
+.emote-animated {
+  display: inline-block;
+  animation: bounceEmote 2s ease-in-out infinite;
+}
+```
+
+#### `src/context/ThemeContext.jsx`
+Mendukung mode `system`, `light`, `dark` (pilihan manual menimpa sistem), serta warna aksen `green`, `blue`, `purple`, `orange`.
+```jsx
+import { createContext, useContext, useEffect, useState } from 'react';
+
+const ThemeContext = createContext(null);
+
+export const ACCENT_OPTIONS = [
+  { id: 'green', label: 'Hijau', color: '#10b981' },
+  { id: 'blue', label: 'Biru', color: '#3b82f6' },
+  { id: 'purple', label: 'Ungu', color: '#8b5cf6' },
+  { id: 'orange', label: 'Oranye', color: '#f97316' }
+];
+
+export function ThemeProvider({ children }) {
+  const [themeMode, setThemeMode] = useState(() => {
+    return localStorage.getItem('sainbyte_theme') || 'system';
+  });
+
+  const [accent, setAccent] = useState(() => {
+    return localStorage.getItem('sainbyte_accent') || 'blue';
+  });
+
+  const [systemDark, setSystemDark] = useState(() =>
+    window.matchMedia('(prefers-color-scheme: dark)').matches
+  );
+
+  useEffect(() => {
+    const mq = window.matchMedia('(prefers-color-scheme: dark)');
+    const onChange = (e) => setSystemDark(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+
+  const isDark = themeMode === 'system' ? systemDark : themeMode === 'dark';
+
+  useEffect(() => {
+    localStorage.setItem('sainbyte_theme', themeMode);
+    const root = document.documentElement;
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+  }, [themeMode, isDark]);
+
+  useEffect(() => {
+    localStorage.setItem('sainbyte_accent', accent);
+    document.documentElement.setAttribute('data-accent', accent);
+  }, [accent]);
+
+  return (
+    <ThemeContext.Provider
+      value={{
+        themeMode,
+        setThemeMode,
+        isDark,
+        accent,
+        setAccent
+      }}
+    >
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export const useTheme = () => useContext(ThemeContext);
+```
+
+#### `src/context/AuthContext.jsx`
+```jsx
+import { createContext, useContext, useEffect, useState } from 'react';
+import {
+  onAuthStateChanged,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut
+} from 'firebase/auth';
+import { auth, googleProvider } from '../firebase';
+
+const AuthContext = createContext(null);
+
+export function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  const ownerEmail = (import.meta.env.VITE_OWNER_EMAIL || '').trim().toLowerCase();
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const isOwner = Boolean(
+    user &&
+      (!ownerEmail || (user.email || '').trim().toLowerCase() === ownerEmail)
+  );
+
+  const loginWithGoogle = () => signInWithPopup(auth, googleProvider);
+
+  const loginWithEmail = (email, password) =>
+    signInWithEmailAndPassword(auth, email, password);
+
+  const logout = () => signOut(auth);
+
+  return (
+    <AuthContext.Provider
+      value={{
+        user,
+        isOwner,
+        loading,
+        loginWithGoogle,
+        loginWithEmail,
+        logout
+      }}
+    >
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+export const useAuth = () => useContext(AuthContext);
+```
+
+#### `src/utils/format.js`
+```js
+export function formatTanggal(ts) {
+  if (!ts) return '-';
+  const date = ts?.toDate ? ts.toDate() : new Date(ts);
+  if (Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('id-ID', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit'
+  }).format(date);
+}
+
+export function getTodayKey() {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, '0');
+  const d = String(now.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+export function normalizeUrl(url) {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (/^https?:\/\//i.test(trimmed)) return trimmed;
+  return `https://${trimmed}`;
+}
+```
+
+---
+
+### 5. Komponen UI Bersama
+
+#### `src/components/Modal.jsx`
+Semua modal selalu tampil di tengah layar (`items-center justify-center`), tidak pernah menjadi bottom sheet.
+```jsx
+import { useEffect } from 'react';
+import { X } from 'lucide-react';
+
+export default function Modal({ open, onClose, title, children, maxWidth = 'max-w-md' }) {
+  useEffect(() => {
+    if (!open) return;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className={`w-full ${maxWidth} rounded-2xl bg-white text-slate-900 dark:bg-slate-900 dark:text-slate-100 border border-slate-200 dark:border-slate-800 shadow-2xl animate-pop-in max-h-[88vh] flex flex-col`}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between px-5 py-4 border-b border-slate-200 dark:border-slate-800 shrink-0">
+          <h3 className="text-base font-semibold">{title}</h3>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Tutup"
+            className="p-1.5 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-slate-100 dark:hover:bg-slate-800 transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
+        <div className="p-5 overflow-y-auto">{children}</div>
+      </div>
+    </div>
+  );
+}
+```
+
+#### `src/components/Toast.jsx`
+```jsx
+export default function Toast({ message }) {
+  if (!message) return null;
+  return (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-[60] px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900 text-sm font-medium shadow-lg animate-pop-in">
+      {message}
+    </div>
+  );
+}
+```
+
+#### `src/components/VisitCounter.jsx`
+Menghitung kunjungan total dan hari ini secara otomatis, disimpan ke Firestore (`visits/stats` dan `analytics/{YYYY-MM-DD}`), dan ditampilkan dengan animasi count-up.
+```jsx
+import { useEffect, useRef, useState } from 'react';
+import { doc, getDoc, increment, onSnapshot, setDoc } from 'firebase/firestore';
+import { db } from '../firebase';
+import { getTodayKey } from '../utils/format';
+
+export default function VisitCounter() {
+  const [stats, setStats] = useState({ total: 0, today: 0 });
+  const [displayTotal, setDisplayTotal] = useState(0);
+  const [displayToday, setDisplayToday] = useState(0);
+  const recordedRef = useRef(false);
+
+  useEffect(() => {
+    const todayKey = getTodayKey();
+    const visitRef = doc(db, 'visits', 'stats');
+    const analyticsRef = doc(db, 'analytics', todayKey);
+
+    const recordVisit = async () => {
+      if (recordedRef.current) return;
+      recordedRef.current = true;
+      if (sessionStorage.getItem('sainbyte_visited') === todayKey) return;
+
+      try {
+        const snap = await getDoc(visitRef);
+        if (!snap.exists()) {
+          await setDoc(visitRef, {
+            total: 1,
+            today: 1,
+            lastVisit: todayKey
+          });
+        } else {
+          const data = snap.data();
+          const isSameDay = data.lastVisit === todayKey;
+          await setDoc(
+            visitRef,
+            {
+              total: (data.total || 0) + 1,
+              today: isSameDay ? (data.today || 0) + 1 : 1,
+              lastVisit: todayKey
+            },
+            { merge: true }
+          );
+        }
+
+        const analyticSnap = await getDoc(analyticsRef);
+        if (!analyticSnap.exists()) {
+          await setDoc(analyticsRef, {
+            date: todayKey,
+            visits: 1,
+            clicks: 0
+          });
+        } else {
+          await setDoc(
+            analyticsRef,
+            {
+              date: todayKey,
+              visits: increment(1)
+            },
+            { merge: true }
+          );
+        }
+
+        sessionStorage.setItem('sainbyte_visited', todayKey);
+      } catch (err) {
+        console.error('Gagal mencatat kunjungan:', err);
+      }
+    };
+
+    recordVisit();
+
+    const unsub = onSnapshot(visitRef, (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const isToday = data.lastVisit === getTodayKey();
+        setStats({
+          total: data.total || 0,
+          today: isToday ? data.today || 0 : 0
+        });
+      }
+    });
+
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const duration = 600;
+    const startTotal = displayTotal;
+    const startToday = displayToday;
+    const targetTotal = stats.total;
+    const targetToday = stats.today;
+    const startTime = performance.now();
+
+    let rafId;
+    const step = (now) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      setDisplayTotal(Math.round(startTotal + (targetTotal - startTotal) * eased));
+      setDisplayToday(Math.round(startToday + (targetToday - startToday) * eased));
+      if (progress < 1) {
+        rafId = requestAnimationFrame(step);
+      }
+    };
+    rafId = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafId);
+  }, [stats.total, stats.today]);
+
+  return (
+    <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-slate-600 dark:text-slate-400">
+      <span>
+        Total Kunjungan:{' '}
+        <strong className="text-slate-900 dark:text-slate-100 tabular-nums">
+          {displayTotal.toLocaleString('id-ID')}
+        </strong>
+      </span>
+      <span className="opacity-40">•</span>
+      <span>
+        Hari Ini:{' '}
+        <strong className="text-slate-900 dark:text-slate-100 tabular-nums">
+          {displayToday.toLocaleString('id-ID')}
+        </strong>
+      </span>
+    </div>
+  );
+}
+```
+
+#### `src/components/ChatBox.jsx`
+Global chatbox dengan pengiriman optimistik (bubble langsung muncul tanpa menunggu server), emote animasi, quote reply, like, serta pin (maksimal 1 komentar) dan hapus khusus admin.
+```jsx
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  writeBatch
+} from 'firebase/firestore';
+import { Heart, Pin, PinOff, Reply, Send, Smile, Trash2, X } from 'lucide-react';
+import { db } from '../firebase';
+import { formatTanggal } from '../utils/format';
+
+const ANIMATED_EMOTES = ['👍', '❤️', '😂', '🔥', '🎉', '😍', '👏', '✨'];
+
+function renderMessageWithEmotes(text) {
+  const parts = String(text).split(/(\p{Emoji_Presentation}|\p{Extended_Pictographic})/gu);
+  return parts.map((part, i) => {
+    if (ANIMATED_EMOTES.includes(part)) {
+      return (
+        <span key={i} className="emote-animated mx-0.5">
+          {part}
+        </span>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
+export default function ChatBox({ isAdminUnlocked, onRequireAdmin, showToast }) {
+  const [serverComments, setServerComments] = useState([]);
+  const [optimisticComments, setOptimisticComments] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  const [name, setName] = useState('');
+  const [message, setMessage] = useState('');
+  const [replyTo, setReplyTo] = useState(null);
+  const [showEmotes, setShowEmotes] = useState(false);
+
+  const [likedIds, setLikedIds] = useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('sainbyte_liked_comments') || '[]');
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const q = query(collection(db, 'comments'), orderBy('createdAt', 'desc'));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setServerComments(list);
+        setOptimisticComments((prev) =>
+          prev.filter((opt) => !list.some((srv) => srv.clientId === opt.clientId))
+        );
+        setLoading(false);
+      },
+      (err) => {
+        console.error(err);
+        setLoading(false);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  const allComments = useMemo(() => {
+    const merged = [...optimisticComments, ...serverComments];
+    return merged.sort((a, b) => {
+      if (a.pinned && !b.pinned) return -1;
+      if (!a.pinned && b.pinned) return 1;
+      const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : new Date(a.createdAt || Date.now()).getTime();
+      const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : new Date(b.createdAt || Date.now()).getTime();
+      return tb - ta;
+    });
+  }, [optimisticComments, serverComments]);
+
+  const handleSend = async (e) => {
+    e.preventDefault();
+    const cleanMessage = message.trim();
+    if (!cleanMessage) return;
+
+    const cleanName = name.trim() || 'Anonim';
+    const clientId = `c_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+
+    const optimisticItem = {
+      id: clientId,
+      clientId,
+      name: cleanName,
+      message: cleanMessage,
+      replyToId: replyTo?.id || '',
+      replyToName: replyTo?.name || '',
+      replyToMessage: replyTo?.message || '',
+      likes: 0,
+      pinned: false,
+      createdAt: new Date(),
+      _optimistic: true
+    };
+
+    // Optimistic render langsung sebelum server merespons
+    setOptimisticComments((prev) => [optimisticItem, ...prev]);
+    setMessage('');
+    setReplyTo(null);
+    setShowEmotes(false);
+
+    try {
+      await addDoc(collection(db, 'comments'), {
+        clientId,
+        name: cleanName,
+        message: cleanMessage,
+        replyToId: optimisticItem.replyToId,
+        replyToName: optimisticItem.replyToName,
+        replyToMessage: optimisticItem.replyToMessage,
+        likes: 0,
+        pinned: false,
+        createdAt: serverTimestamp()
+      });
+    } catch (err) {
+      setOptimisticComments((prev) => prev.filter((item) => item.clientId !== clientId));
+      showToast('Gagal mengirim komentar');
+      console.error(err);
+    }
+  };
+
+  const handleLike = async (comment) => {
+    if (comment._optimistic) return;
+    const alreadyLiked = likedIds.includes(comment.id);
+    const nextLiked = alreadyLiked
+      ? likedIds.filter((id) => id !== comment.id)
+      : [...likedIds, comment.id];
+
+    setLikedIds(nextLiked);
+    localStorage.setItem('sainbyte_liked_comments', JSON.stringify(nextLiked));
+
+    try {
+      await updateDoc(doc(db, 'comments', comment.id), {
+        likes: increment(alreadyLiked ? -1 : 1)
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handlePin = async (comment) => {
+    if (!isAdminUnlocked) {
+      onRequireAdmin(() => handlePin(comment));
+      return;
+    }
+    try {
+      const batch = writeBatch(db);
+      if (!comment.pinned) {
+        serverComments
+          .filter((c) => c.pinned && c.id !== comment.id)
+          .forEach((c) => {
+            batch.update(doc(db, 'comments', c.id), { pinned: false });
+          });
+      }
+      batch.update(doc(db, 'comments', comment.id), { pinned: !comment.pinned });
+      await batch.commit();
+      showToast(comment.pinned ? 'Sematkan dilepas' : 'Komentar disematkan');
+    } catch (err) {
+      showToast('Gagal mengubah sematan. Pastikan akun admin login.');
+      console.error(err);
+    }
+  };
+
+  const handleDelete = async (comment) => {
+    if (!isAdminUnlocked) {
+      onRequireAdmin(() => handleDelete(comment));
+      return;
+    }
+    try {
+      await deleteDoc(doc(db, 'comments', comment.id));
+      showToast('Komentar dihapus');
+    } catch (err) {
+      showToast('Gagal menghapus komentar. Pastikan akun admin login.');
+      console.error(err);
+    }
+  };
+
+  return (
+    <section className="mt-10 rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-6 shadow-sm">
+      <div className="flex items-center justify-between mb-4">
+        <h2 className="text-base font-semibold text-slate-900 dark:text-slate-100">
+          Komentar Publik ({allComments.length})
+        </h2>
+      </div>
+
+      {/* Form Kirim Komentar */}
+      <form onSubmit={handleSend} className="space-y-3 mb-6">
+        {replyTo && (
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-xs text-slate-700 dark:text-slate-300 border-l-4 accent-border">
+            <div className="min-w-0">
+              <span className="font-semibold">Membalas {replyTo.name}: </span>
+              <span className="truncate block opacity-80">{replyTo.message}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyTo(null)}
+              className="p-1 rounded hover:bg-slate-200 dark:hover:bg-slate-700"
+              aria-label="Batal balas"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            maxLength={40}
+            placeholder="Nama (opsional)"
+            className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 accent-ring"
+          />
+          <div className="sm:col-span-2 flex gap-2">
+            <input
+              type="text"
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              maxLength={1000}
+              placeholder="Tulis komentar..."
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/70 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 accent-ring"
+            />
+            <button
+              type="button"
+              onClick={() => setShowEmotes((v) => !v)}
+              aria-label="Pilih emote"
+              className="px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors shrink-0"
+            >
+              <Smile className="w-4 h-4" />
+            </button>
+            <button
+              type="submit"
+              disabled={!message.trim()}
+              className="px-4 py-2.5 rounded-xl accent-bg text-white text-sm font-medium flex items-center gap-1.5 disabled:opacity-40 transition-all shrink-0"
+            >
+              <Send className="w-4 h-4" />
+              <span className="hidden sm:inline">Kirim</span>
+            </button>
+          </div>
+        </div>
+
+        {showEmotes && (
+          <div className="flex flex-wrap gap-2 p-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/80 animate-pop-in">
+            {ANIMATED_EMOTES.map((emote) => (
+              <button
+                key={emote}
+                type="button"
+                onClick={() => setMessage((prev) => `${prev}${emote}`)}
+                className="w-9 h-9 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-700 flex items-center justify-center text-lg transition-transform active:scale-90"
+              >
+                <span className="emote-animated">{emote}</span>
+              </button>
+            ))}
+          </div>
+        )}
+      </form>
+
+      {/* Daftar Komentar */}
+      {loading ? (
+        <p className="text-center py-6 text-sm text-slate-500 dark:text-slate-400">
+          Memuat komentar...
+        </p>
+      ) : allComments.length === 0 ? (
+        <div className="text-center py-8 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl">
+          <p className="text-sm text-slate-500 dark:text-slate-400 mb-3">Belum ada data</p>
+          <button
+            type="button"
+            onClick={() => document.querySelector('input[placeholder="Tulis komentar..."]')?.focus()}
+            className="px-4 py-2 text-xs font-medium rounded-lg accent-bg text-white transition-colors"
+          >
+            Tulis Komentar Baru
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3 max-h-[420px] overflow-y-auto pr-1">
+          {allComments.map((comment) => {
+            const isLiked = likedIds.includes(comment.id);
+            return (
+              <div
+                key={comment.id}
+                className={`p-3.5 rounded-xl border transition-all animate-fade-in-up ${
+                  comment.pinned
+                    ? 'border-amber-400/60 bg-amber-50/60 dark:bg-amber-950/20'
+                    : 'border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40'
+                } ${comment._optimistic ? 'opacity-75' : ''}`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <div className="flex items-center flex-wrap gap-2">
+                      <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+                        {comment.name || 'Anonim'}
+                      </span>
+                      {comment.pinned && (
+                        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300">
+                          <Pin className="w-3 h-3" /> Disematkan
+                        </span>
+                      )}
+                      {comment._optimistic ? (
+                        <span className="text-[11px] text-slate-400 animate-pulse">
+                          Mengirim...
+                        </span>
+                      ) : (
+                        <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                          {formatTanggal(comment.createdAt)}
+                        </span>
+                      )}
+                    </div>
+
+                    {comment.replyToMessage && (
+                      <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-200/70 dark:bg-slate-800 border-l-2 accent-border text-xs text-slate-600 dark:text-slate-300">
+                        <span className="font-semibold">{comment.replyToName || 'Anonim'}: </span>
+                        <span className="line-clamp-2">{comment.replyToMessage}</span>
+                      </div>
+                    )}
+
+                    <p className="mt-1.5 text-sm text-slate-800 dark:text-slate-200 break-words leading-relaxed">
+                      {renderMessageWithEmotes(comment.message)}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-2.5 flex items-center gap-3 text-xs text-slate-500 dark:text-slate-400">
+                  <button
+                    type="button"
+                    onClick={() => handleLike(comment)}
+                    disabled={comment._optimistic}
+                    className={`inline-flex items-center gap-1 px-2 py-1 rounded-lg transition-colors ${
+                      isLiked
+                        ? 'text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40'
+                        : 'hover:bg-slate-200/70 dark:hover:bg-slate-700/60'
+                    }`}
+                  >
+                    <Heart className={`w-3.5 h-3.5 ${isLiked ? 'fill-current' : ''}`} />
+                    <span className="tabular-nums">{comment.likes || 0}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setReplyTo({
+                        id: comment.id,
+                        name: comment.name || 'Anonim',
+                        message: comment.message
+                      })
+                    }
+                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors"
+                  >
+                    <Reply className="w-3.5 h-3.5" />
+                    Balas
+                  </button>
+
+                  {isAdminUnlocked && !comment._optimistic && (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => handlePin(comment)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg hover:bg-slate-200/70 dark:hover:bg-slate-700/60 transition-colors"
+                      >
+                        {comment.pinned ? (
+                          <>
+                            <PinOff className="w-3.5 h-3.5" /> Lepas
+                          </>
+                        ) : (
+                          <>
+                            <Pin className="w-3.5 h-3.5" /> Sematkan
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDelete(comment)}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" /> Hapus
+                      </button>
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+```
+
+---
+
+### 6. Route 1: Halaman Publik `/` (`src/pages/PublicPage.jsx`)
+
+Fitur lengkap:
+- Header polos tanpa ikon/logo/icon box: `sainbyte` dan subheader `dashboard list project`.
+- Ketuk teks `sainbyte` 5 kali cepat untuk masuk ke `/developer`.
+- Konten lebar **80% terpusat di mobile** (`w-[80%] mx-auto`), mendukung mode tampilan Desktop / Mobile.
+- Semua data berasal dari Firestore, kosong di awal (`Belum ada data` + tombol tambah).
+- Search, filter kategori + jumlah per kategori, copy link, klik link menghitung klik + analitik harian, drag-and-drop & tombol naik/turun untuk mobile Android, Export/Import JSON, Tema (Otomatis/Terang/Gelap + Hijau/Biru/Ungu/Oranye), PIN Admin Modal + Verifikasi Firebase Auth jika sesi belum aktif, ChatBox, VisitCounter, dan tombol Install PWA jika browser mendukung.
+
+```jsx
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  increment,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  setDoc,
+  updateDoc,
+  writeBatch
+} from 'firebase/firestore';
+import {
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Copy,
+  Download,
+  ExternalLink,
+  GripVertical,
+  Lock,
+  Monitor,
+  Moon,
+  Palette,
+  Pencil,
+  Plus,
+  Search,
+  Smartphone,
+  Sun,
+  Trash2,
+  Unlock,
+  Upload
+} from 'lucide-react';
+import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
+import { ACCENT_OPTIONS, useTheme } from '../context/ThemeContext';
+import { formatTanggal, getTodayKey, normalizeUrl } from '../utils/format';
+import Modal from '../components/Modal';
+import Toast from '../components/Toast';
+import ChatBox from '../components/ChatBox';
+import VisitCounter from '../components/VisitCounter';
+
+export default function PublicPage() {
+  const navigate = useNavigate();
+  const { isOwner, loginWithGoogle, loginWithEmail } = useAuth();
+  const { themeMode, setThemeMode, accent, setAccent } = useTheme();
+
+  // Hidden 5-tap trigger ke /developer
+  const tapTimestamps = useRef([]);
+  const handleSecretTap = () => {
+    const now = Date.now();
+    tapTimestamps.current = tapTimestamps.current.filter((t) => now - t < 2500);
+    tapTimestamps.current.push(now);
+    if (tapTimestamps.current.length >= 5) {
+      tapTimestamps.current = [];
+      navigate('/developer');
+    }
+  };
+
+  // State proyek
+  const [projects, setProjects] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState('Semua');
+  const [copiedId, setCopiedId] = useState(null);
+  const [toastMsg, setToastMsg] = useState('');
+
+  // Mode tampilan Mobile / Desktop
+  const [viewMode, setViewMode] = useState('auto'); // 'auto' | 'desktop' | 'mobile'
+
+  // PWA Install prompt
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+
+  // Admin unlock via PIN + Firebase Auth
+  const [isPinVerified, setIsPinVerified] = useState(false);
+  const [pinModalOpen, setPinModalOpen] = useState(false);
+  const [pinInput, setPinInput] = useState('');
+  const [pinError, setPinError] = useState('');
+  const [pendingAction, setPendingAction] = useState(null);
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPass, setAuthPass] = useState('');
+  const [authLoading, setAuthLoading] = useState(false);
+
+  // Form Tambah / Edit Proyek
+  const [projectModalOpen, setProjectModalOpen] = useState(false);
+  const [editingProject, setEditingProject] = useState(null);
+  const [formState, setFormState] = useState({
+    title: '',
+    description: '',
+    url: '',
+    category: ''
+  });
+  const [saving, setSaving] = useState(false);
+
+  // Modal Tema
+  const [themeModalOpen, setThemeModalOpen] = useState(false);
+
+  // Drag & Drop state
+  const [draggedId, setDraggedId] = useState(null);
+
+  const fileInputRef = useRef(null);
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2600);
+  };
+
+  const isAdminActive = isPinVerified && isOwner;
+
+  useEffect(() => {
+    document.title = 'sainbyte - dashboard list project';
+  }, []);
+
+  useEffect(() => {
+    const handler = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+
+  useEffect(() => {
+    const q = query(collection(db, 'projects'), orderBy('order', 'asc'));
+    const unsub = onSnapshot(
+      q,
+      (snap) => {
+        const list = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setProjects(list);
+        setLoading(false);
+      },
+      (err) => {
+        console.error(err);
+        setLoading(false);
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Kategori dan total per kategori
+  const categoryStats = useMemo(() => {
+    const counts = {};
+    projects.forEach((p) => {
+      const cat = (p.category || 'Umum').trim() || 'Umum';
+      counts[cat] = (counts[cat] || 0) + 1;
+    });
+    return Object.entries(counts).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [projects]);
+
+  const filteredProjects = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return projects.filter((p) => {
+      const cat = (p.category || 'Umum').trim() || 'Umum';
+      const matchCat = selectedCategory === 'Semua' || cat === selectedCategory;
+      const matchQuery =
+        !q ||
+        (p.title || '').toLowerCase().includes(q) ||
+        (p.description || '').toLowerCase().includes(q) ||
+        (p.url || '').toLowerCase().includes(q) ||
+        cat.toLowerCase().includes(q);
+      return matchCat && matchQuery;
+    });
+  }, [projects, searchQuery, selectedCategory]);
+
+  const requireAdmin = (callback) => {
+    if (isAdminActive) {
+      callback?.();
+      return;
+    }
+    setPendingAction(() => callback || null);
+    setPinError('');
+    setPinInput('');
+    setPinModalOpen(true);
+  };
+
+  const handlePinSubmit = async (e) => {
+    e.preventDefault();
+    const expectedPin = import.meta.env.VITE_ADMIN_PIN;
+    if (!expectedPin) {
+      setPinError('VITE_ADMIN_PIN belum dikonfigurasi.');
+      return;
+    }
+    if (pinInput.trim() !== String(expectedPin).trim()) {
+      setPinError('PIN salah.');
+      return;
+    }
+    setPinError('');
+    setIsPinVerified(true);
+
+    if (isOwner) {
+      setPinModalOpen(false);
+      showToast('Mode admin aktif');
+      const cb = pendingAction;
+      setPendingAction(null);
+      cb?.();
+    }
+  };
+
+  const handleInlineGoogleAuth = async () => {
+    setAuthLoading(true);
+    setPinError('');
+    try {
+      await loginWithGoogle();
+      setPinModalOpen(false);
+      showToast('Mode admin aktif');
+      const cb = pendingAction;
+      setPendingAction(null);
+      cb?.();
+    } catch (err) {
+      setPinError('Login Google gagal atau bukan akun pemilik.');
+      console.error(err);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleInlineEmailAuth = async (e) => {
+    e.preventDefault();
+    setAuthLoading(true);
+    setPinError('');
+    try {
+      await loginWithEmail(authEmail, authPass);
+      setPinModalOpen(false);
+      showToast('Mode admin aktif');
+      const cb = pendingAction;
+      setPendingAction(null);
+      cb?.();
+    } catch (err) {
+      setPinError('Email atau kata sandi salah.');
+      console.error(err);
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const openAddModal = () => {
+    requireAdmin(() => {
+      setEditingProject(null);
+      setFormState({ title: '', description: '', url: '', category: '' });
+      setProjectModalOpen(true);
+    });
+  };
+
+  const openEditModal = (project) => {
+    requireAdmin(() => {
+      setEditingProject(project);
+      setFormState({
+        title: project.title || '',
+        description: project.description || '',
+        url: project.url || '',
+        category: project.category || ''
+      });
+      setProjectModalOpen(true);
+    });
+  };
+
+  const handleSaveProject = async (e) => {
+    e.preventDefault();
+    if (!formState.title.trim() || !formState.url.trim()) {
+      showToast('Judul dan URL wajib diisi');
+      return;
+    }
+    setSaving(true);
+    try {
+      const payload = {
+        title: formState.title.trim(),
+        description: formState.description.trim(),
+        url: normalizeUrl(formState.url),
+        category: formState.category.trim() || 'Umum',
+        updatedAt: serverTimestamp()
+      };
+
+      if (editingProject) {
+        await updateDoc(doc(db, 'projects', editingProject.id), payload);
+        showToast('Proyek diperbarui');
+      } else {
+        const nextOrder =
+          projects.length > 0
+            ? Math.max(...projects.map((p) => p.order ?? 0)) + 1
+            : 0;
+        await addDoc(collection(db, 'projects'), {
+          ...payload,
+          clicks: 0,
+          order: nextOrder,
+          createdAt: serverTimestamp()
+        });
+        showToast('Proyek ditambahkan');
+      }
+      setProjectModalOpen(false);
+    } catch (err) {
+      showToast('Gagal menyimpan proyek');
+      console.error(err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleDeleteProject = (project) => {
+    requireAdmin(async () => {
+      try {
+        await deleteDoc(doc(db, 'projects', project.id));
+        showToast('Proyek dihapus');
+      } catch (err) {
+        showToast('Gagal menghapus proyek');
+        console.error(err);
+      }
+    });
+  };
+
+  const handleOpenLink = async (project) => {
+    const targetUrl = normalizeUrl(project.url);
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
+
+    try {
+      await updateDoc(doc(db, 'projects', project.id), {
+        clicks: increment(1)
+      });
+
+      const todayKey = getTodayKey();
+      const analyticRef = doc(db, 'analytics', todayKey);
+      const snap = await getDoc(analyticRef);
+      if (!snap.exists()) {
+        await setDoc(analyticRef, { date: todayKey, visits: 0, clicks: 1 });
+      } else {
+        await setDoc(analyticRef, { date: todayKey, clicks: increment(1) }, { merge: true });
+      }
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleCopyLink = async (project) => {
+    try {
+      await navigator.clipboard.writeText(normalizeUrl(project.url));
+      setCopiedId(project.id);
+      showToast('Tautan disalin');
+      setTimeout(() => setCopiedId(null), 1600);
+    } catch {
+      showToast('Gagal menyalin tautan');
+    }
+  };
+
+  const persistOrder = async (newList) => {
+    try {
+      const batch = writeBatch(db);
+      newList.forEach((item, index) => {
+        batch.update(doc(db, 'projects', item.id), { order: index });
+      });
+      await batch.commit();
+      showToast('Urutan disimpan');
+    } catch (err) {
+      showToast('Gagal mengubah urutan');
+      console.error(err);
+    }
+  };
+
+  const handleDropOnCard = async (targetId) => {
+    if (!isAdminActive || !draggedId || draggedId === targetId) return;
+    const fromIdx = projects.findIndex((p) => p.id === draggedId);
+    const toIdx = projects.findIndex((p) => p.id === targetId);
+    if (fromIdx === -1 || toIdx === -1) return;
+
+    const updated = [...projects];
+    const [moved] = updated.splice(fromIdx, 1);
+    updated.splice(toIdx, 0, moved);
+    setDraggedId(null);
+    await persistOrder(updated);
+  };
+
+  const handleMoveStep = async (project, direction) => {
+    if (!isAdminActive) return;
+    const idx = projects.findIndex((p) => p.id === project.id);
+    const swapIdx = idx + direction;
+    if (swapIdx < 0 || swapIdx >= projects.length) return;
+    const updated = [...projects];
+    [updated[idx], updated[swapIdx]] = [updated[swapIdx], updated[idx]];
+    await persistOrder(updated);
+  };
+
+  const handleExportJson = () => {
+    if (projects.length === 0) {
+      showToast('Belum ada data untuk diekspor');
+      return;
+    }
+    const clean = projects.map(({ title, description, url, category, clicks, order }) => ({
+      title,
+      description,
+      url,
+      category,
+      clicks: clicks || 0,
+      order: order ?? 0
+    }));
+    const blob = new Blob([JSON.stringify(clean, null, 2)], { type: 'application/json' });
+    const dlUrl = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = dlUrl;
+    a.download = `sainbyte-projects-${getTodayKey()}.json`;
+    a.click();
+    URL.revokeObjectURL(dlUrl);
+    showToast('JSON berhasil diekspor');
+  };
+
+  const handleImportJson = async (e) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    try {
+      const text = await file.text();
+      const parsed = JSON.parse(text);
+      if (!Array.isArray(parsed)) {
+        showToast('Format JSON harus berupa array');
+        return;
+      }
+      const batch = writeBatch(db);
+      let baseOrder =
+        projects.length > 0 ? Math.max(...projects.map((p) => p.order ?? 0)) + 1 : 0;
+
+      parsed.forEach((item) => {
+        if (item?.title && item?.url) {
+          const ref = doc(collection(db, 'projects'));
+          batch.set(ref, {
+            title: String(item.title).trim(),
+            description: String(item.description || '').trim(),
+            url: normalizeUrl(String(item.url)),
+            category: String(item.category || 'Umum').trim() || 'Umum',
+            clicks: Number(item.clicks) || 0,
+            order: baseOrder++,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp()
+          });
+        }
+      });
+      await batch.commit();
+      showToast('Impor JSON berhasil');
+    } catch (err) {
+      showToast('Gagal mengimpor file JSON');
+      console.error(err);
+    }
+  };
+
+  const handleInstallPwa = async () => {
+    if (!deferredPrompt) return;
+    deferredPrompt.prompt();
+    const { outcome } = await deferredPrompt.userChoice;
+    if (outcome === 'accepted') {
+      setDeferredPrompt(null);
+    }
+  };
+
+  // Lebar konten: 80% centered di mobile, mendukung mode Desktop / Mobile
+  const containerClass =
+    viewMode === 'mobile'
+      ? 'w-[80%] max-w-md mx-auto'
+      : viewMode === 'desktop'
+      ? 'w-[92%] max-w-6xl mx-auto'
+      : 'w-[80%] md:w-[88%] max-w-5xl mx-auto';
+
+  const gridClass =
+    viewMode === 'mobile'
+      ? 'grid-cols-1'
+      : viewMode === 'desktop'
+      ? 'grid-cols-3'
+      : 'grid-cols-1 md:grid-cols-2 lg:grid-cols-3';
+
+  return (
+    <div className="min-h-screen bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 transition-colors duration-200 flex flex-col">
+      <Toast message={toastMsg} />
+
+      <main className={`${containerClass} py-8 sm:py-10 flex-1`}>
+        {/* Header polos tanpa logo, tanpa ikon, tanpa icon box */}
+        <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 pb-6 border-b border-slate-200 dark:border-slate-800">
+          <div>
+            <h1
+              onClick={handleSecretTap}
+              className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-slate-50 select-none cursor-default inline-block"
+            >
+              sainbyte
+            </h1>
+            <p className="text-sm text-slate-600 dark:text-slate-400 mt-0.5">
+              dashboard list project
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-2">
+            {deferredPrompt && (
+              <button
+                type="button"
+                onClick={handleInstallPwa}
+                className="px-3 py-2 text-xs font-medium rounded-xl accent-soft-bg accent-text hover:opacity-90 transition-opacity"
+              >
+                Install Aplikasi
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() =>
+                setViewMode((v) =>
+                  v === 'auto' ? 'desktop' : v === 'desktop' ? 'mobile' : 'auto'
+                )
+              }
+              title="Ubah mode tampilan"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              {viewMode === 'desktop' ? (
+                <Monitor className="w-4 h-4" />
+              ) : viewMode === 'mobile' ? (
+                <Smartphone className="w-4 h-4" />
+              ) : (
+                <Monitor className="w-4 h-4 opacity-70" />
+              )}
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setThemeModalOpen(true)}
+              title="Tema dan Warna"
+              className="p-2 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+            >
+              <Palette className="w-4 h-4" />
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (isAdminActive) {
+                  setIsPinVerified(false);
+                  showToast('Mode admin dikunci');
+                } else {
+                  requireAdmin();
+                }
+              }}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-colors ${
+                isAdminActive
+                  ? 'accent-bg text-white border-transparent'
+                  : 'border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              {isAdminActive ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+              <span>{isAdminActive ? 'Admin Aktif' : 'Admin'}</span>
+            </button>
+          </div>
+        </header>
+
+        {/* Toolbar Pencarian & Aksi */}
+        <section className="mt-6 space-y-4">
+          <div className="flex flex-col sm:flex-row gap-2.5">
+            <div className="relative flex-1">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Cari proyek berdasarkan judul, deskripsi, atau URL..."
+                className="w-full pl-10 pr-4 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-slate-100 placeholder:text-slate-400 accent-ring"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl accent-bg text-white text-sm font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={handleExportJson}
+                title="Ekspor JSON"
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Download className="w-4 h-4" />
+                <span>Ekspor</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => requireAdmin(() => fileInputRef.current?.click())}
+                title="Impor JSON"
+                className="inline-flex items-center gap-1.5 px-3 py-2.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-200 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+              >
+                <Upload className="w-4 h-4" />
+                <span>Impor</span>
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="application/json"
+                onChange={handleImportJson}
+                className="hidden"
+              />
+            </div>
+          </div>
+
+          {/* Filter Kategori + Total */}
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setSelectedCategory('Semua')}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                selectedCategory === 'Semua'
+                  ? 'accent-bg text-white'
+                  : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+              }`}
+            >
+              Semua ({projects.length})
+            </button>
+            {categoryStats.map(([cat, count]) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${
+                  selectedCategory === cat
+                    ? 'accent-bg text-white'
+                    : 'bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                }`}
+              >
+                {cat} ({count})
+              </button>
+            ))}
+          </div>
+        </section>
+
+        {/* Daftar Kartu Proyek */}
+        <section className="mt-6">
+          {loading ? (
+            <div className={`grid ${gridClass} gap-4`}>
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-40 rounded-2xl bg-slate-200/70 dark:bg-slate-800/60 animate-pulse"
+                />
+              ))}
+            </div>
+          ) : filteredProjects.length === 0 ? (
+            <div className="text-center py-14 px-4 rounded-2xl border border-dashed border-slate-300 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <p className="text-sm text-slate-600 dark:text-slate-400 mb-4">
+                Belum ada data
+              </p>
+              <button
+                type="button"
+                onClick={openAddModal}
+                className="inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl accent-bg text-white text-sm font-medium transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Proyek Baru</span>
+              </button>
+            </div>
+          ) : (
+            <div className={`grid ${gridClass} gap-4`}>
+              {filteredProjects.map((project, idx) => (
+                <article
+                  key={project.id}
+                  draggable={isAdminActive}
+                  onDragStart={() => setDraggedId(project.id)}
+                  onDragOver={(e) => {
+                    if (isAdminActive) e.preventDefault();
+                  }}
+                  onDrop={() => handleDropOnCard(project.id)}
+                  className={`group rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between animate-fade-in-up ${
+                    draggedId === project.id ? 'opacity-50 scale-[0.98]' : ''
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className="inline-block px-2.5 py-0.5 rounded-full text-[11px] font-medium accent-soft-bg accent-text">
+                        {project.category || 'Umum'}
+                      </span>
+
+                      {isAdminActive && (
+                        <div className="flex items-center gap-1 text-slate-400">
+                          <span className="cursor-grab hidden sm:inline-flex p-1" title="Seret untuk mengurutkan">
+                            <GripVertical className="w-3.5 h-3.5" />
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveStep(project, -1)}
+                            disabled={idx === 0}
+                            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                            title="Geser naik"
+                          >
+                            <ArrowUp className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleMoveStep(project, 1)}
+                            disabled={idx === filteredProjects.length - 1}
+                            className="p-1 rounded hover:bg-slate-100 dark:hover:bg-slate-800 disabled:opacity-30"
+                            title="Geser turun"
+                          >
+                            <ArrowDown className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+
+                    <h2 className="mt-3 text-base font-semibold text-slate-900 dark:text-slate-100 break-words">
+                      {project.title}
+                    </h2>
+
+                    {project.description && (
+                      <p className="mt-1.5 text-sm text-slate-600 dark:text-slate-400 line-clamp-3 break-words">
+                        {project.description}
+                      </p>
+                    )}
+
+                    <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 truncate">
+                      {project.url}
+                    </p>
+                  </div>
+
+                  <div className="mt-4 pt-3 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                    <div className="flex items-center justify-between text-[11px] text-slate-500 dark:text-slate-400">
+                      <span className="tabular-nums">{project.clicks || 0} klik</span>
+                      <span>Diperbarui {formatTanggal(project.updatedAt || project.createdAt)}</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => handleOpenLink(project)}
+                        className="flex-1 inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-xl accent-bg text-white text-xs font-medium transition-colors"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        <span>Buka</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleCopyLink(project)}
+                        title="Salin tautan"
+                        className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      >
+                        {copiedId === project.id ? (
+                          <Check className="w-3.5 h-3.5 text-emerald-500" />
+                        ) : (
+                          <Copy className="w-3.5 h-3.5" />
+                        )}
+                      </button>
+
+                      {isAdminActive && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(project)}
+                            title="Edit"
+                            className="p-2 rounded-xl border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteProject(project)}
+                            title="Hapus"
+                            className="p-2 rounded-xl border border-rose-200 dark:border-rose-900/60 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+          )}
+        </section>
+
+        {/* Global ChatBox */}
+        <ChatBox
+          isAdminUnlocked={isAdminActive}
+          onRequireAdmin={requireAdmin}
+          showToast={showToast}
+        />
+      </main>
+
+      {/* Footer Visit Counter */}
+      <footer className="border-t border-slate-200 dark:border-slate-800 py-5 px-4 bg-white/70 dark:bg-slate-900/50">
+        <VisitCounter />
+      </footer>
+
+      {/* Modal Verifikasi Admin (PIN + Firebase Auth) */}
+      <Modal
+        open={pinModalOpen}
+        onClose={() => {
+          setPinModalOpen(false);
+          setPendingAction(null);
+        }}
+        title="Verifikasi Admin"
+      >
+        <div className="space-y-4">
+          {!isPinVerified ? (
+            <form onSubmit={handlePinSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1.5">
+                  Masukkan PIN Admin
+                </label>
+                <input
+                  type="password"
+                  value={pinInput}
+                  onChange={(e) => setPinInput(e.target.value)}
+                  autoFocus
+                  placeholder="PIN"
+                  className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+                />
+              </div>
+              {pinError && <p className="text-xs text-rose-600 dark:text-rose-400">{pinError}</p>}
+              <button
+                type="submit"
+                className="w-full py-2.5 rounded-xl accent-bg text-white text-sm font-medium transition-colors"
+              >
+                Lanjutkan
+              </button>
+            </form>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-slate-600 dark:text-slate-400">
+                PIN terverifikasi. Masuk dengan akun pemilik Firebase agar perubahan dapat disimpan ke database.
+              </p>
+
+              <button
+                type="button"
+                disabled={authLoading}
+                onClick={handleInlineGoogleAuth}
+                className="w-full py-2.5 px-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 text-sm font-medium hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors"
+              >
+                {authLoading ? 'Memproses...' : 'Masuk dengan Google'}
+              </button>
+
+              <form onSubmit={handleInlineEmailAuth} className="space-y-2.5 pt-2 border-t border-slate-200 dark:border-slate-800">
+                <input
+                  type="email"
+                  required
+                  value={authEmail}
+                  onChange={(e) => setAuthEmail(e.target.value)}
+                  placeholder="Email pemilik"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+                />
+                <input
+                  type="password"
+                  required
+                  value={authPass}
+                  onChange={(e) => setAuthPass(e.target.value)}
+                  placeholder="Kata sandi"
+                  className="w-full px-3.5 py-2 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+                />
+                {pinError && <p className="text-xs text-rose-600 dark:text-rose-400">{pinError}</p>}
+                <button
+                  type="submit"
+                  disabled={authLoading}
+                  className="w-full py-2.5 rounded-xl accent-bg text-white text-sm font-medium transition-colors"
+                >
+                  Masuk dengan Email
+                </button>
+              </form>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Modal Tambah / Edit Proyek */}
+      <Modal
+        open={projectModalOpen}
+        onClose={() => setProjectModalOpen(false)}
+        title={editingProject ? 'Edit Proyek' : 'Tambah Proyek'}
+      >
+        <form onSubmit={handleSaveProject} className="space-y-3.5">
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Judul
+            </label>
+            <input
+              type="text"
+              required
+              value={formState.title}
+              onChange={(e) => setFormState((s) => ({ ...s, title: e.target.value }))}
+              placeholder="Judul proyek"
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+              URL
+            </label>
+            <input
+              type="text"
+              required
+              value={formState.url}
+              onChange={(e) => setFormState((s) => ({ ...s, url: e.target.value }))}
+              placeholder="https://..."
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Kategori
+            </label>
+            <input
+              type="text"
+              value={formState.category}
+              onChange={(e) => setFormState((s) => ({ ...s, category: e.target.value }))}
+              placeholder="Kategori"
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">
+              Deskripsi
+            </label>
+            <textarea
+              rows={3}
+              value={formState.description}
+              onChange={(e) => setFormState((s) => ({ ...s, description: e.target.value }))}
+              placeholder="Deskripsi singkat"
+              className="w-full px-3.5 py-2.5 text-sm rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-900 dark:text-slate-100 accent-ring"
+            />
+          </div>
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setProjectModalOpen(false)}
+              className="px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 text-sm text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800"
+            >
+              Batal
+            </button>
+            <button
+              type="submit"
+              disabled={saving}
+              className="px-4 py-2 rounded-xl accent-bg text-white text-sm font-medium disabled:opacity-50"
+            >
+              {saving ? 'Menyimpan...' : 'Simpan'}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Pengaturan Tema & Aksen */}
+      <Modal
+        open={themeModalOpen}
+        onClose={() => setThemeModalOpen(false)}
+        title="Pengaturan Tema"
+      >
+        <div className="space-y-5">
+          <div>
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2.5">
+              Mode Tampilan
+            </p>
+            <div className="grid grid-cols-3 gap-2">
+              {[
+                { id: 'system', label: 'Sistem', Icon: Monitor },
+                { id: 'light', label: 'Terang', Icon: Sun },
+                { id: 'dark', label: 'Gelap', Icon: Moon }
+              ].map(({ id, label, Icon }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setThemeMode(id)}
+                  className={`flex flex-col items-center gap-1.5 py-3 px-2 rounded-xl border text-xs font-medium transition-colors ${
+                    themeMode === id
+                      ? 'accent-border accent-soft-bg accent-text'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-medium text-slate-600 dark:text-slate-400 mb-2.5">
+              Warna Aksen
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {ACCENT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setAccent(opt.id)}
+                  className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-xs font-medium transition-colors ${
+                    accent === opt.id
+                      ? 'accent-border accent-soft-bg text-slate-900 dark:text-slate-100'
+                      : 'border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <span
+                    className="w-4 h-4 rounded-full shrink-0"
+                    style={{ backgroundColor: opt.color }}
+                  />
+                  <span>{opt.label}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+```
+
+---
+
+### 7. Route 2: Dashboard Pribadi `/developer` (`src/pages/DeveloperPage.jsx`)
+
+Tampilan dibuat **sangat berbeda** dari `/`: dense admin panel, default gelap (`dark`), sidebar di desktop (`lg:flex-row`), bottom navigation di mobile (`lg:hidden fixed bottom-0`), tidak di-index mesin pencari (`noindex, nofollow`), dan tidak mengambil data apa pun sebelum login berhasil sebagai pemilik.
+
+Menyediakan 5 bagian utama:
+1. **Ringkasan (Overview):** Total Proyek, Total Kunjungan, Total Klik, Total Komentar.
+2. **Proyek (CRUD Table):** Pencarian, filter kategori, pengurutan (`sort`), tambah/edit/hapus.
+3. **Komentar (Moderasi):** Pencarian, filter semua/disematkan, sematkan/lepas, hapus.
+4. **Analitik (Visits & Clicks):** Grafik batang harian + tabel kunjungan & klik per hari.
+5. **Database Kustom (Generic Database):** Buat koleksi baru dari nol dengan definisi kolom bebas (`teks`, `angka`, `tanggal`, `centang`), lengkap dengan tabel CRUD, pencarian, dan filter untuk tiap koleksi pribadi.
+
+```jsx
+import { useEffect, useMemo, useState } from 'react';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  onSnapshot,
+  orderBy,
+  query,
+  serverTimestamp,
+  updateDoc,
+  writeBatch
+} from 'firebase/firestore';
+import {
+  ArrowUpDown,
+  BarChart3,
+  Database,
+  ExternalLink,
+  FolderKanban,
+  LayoutDashboard,
+  LogIn,
+  LogOut,
+  MessageSquare,
+  MousePointerClick,
+  Pencil,
+  Pin,
+  PinOff,
+  Plus,
+  Search,
+  Trash2,
+  Users
+} from 'lucide-react';
+import { db } from '../firebase';
+import { useAuth } from '../context/AuthContext';
+import { formatTanggal, normalizeUrl } from '../utils/format';
+import Modal from '../components/Modal';
+import Toast from '../components/Toast';
+
+const FIELD_TYPES = [
+  { id: 'text', label: 'Teks' },
+  { id: 'number', label: 'Angka' },
+  { id: 'date', label: 'Tanggal' },
+  { id: 'boolean', label: 'Status (Ya/Tidak)' }
+];
+
+export default function DeveloperPage() {
+  const { user, isOwner, loading: authLoading, loginWithGoogle, loginWithEmail, logout } = useAuth();
+
+  const [activeTab, setActiveTab] = useState('overview');
+  const [toastMsg, setToastMsg] = useState('');
+
+  // Login Form
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [submittingLogin, setSubmittingLogin] = useState(false);
+
+  // Data States (Hanya dimuat setelah login pemilik terverifikasi)
+  const [projects, setProjects] = useState([]);
+  const [comments, setComments] = useState([]);
+  const [visitStats, setVisitStats] = useState({ total: 0, today: 0 });
+  const [analytics, setAnalytics] = useState([]);
+  const [customCollections, setCustomCollections] = useState([]);
+
+  // Projects Table Controls
+  const [projSearch, setProjSearch] = useState('');
+  const [projCategory, setProjCategory] = useState('Semua');
+  const [projSort, setProjSort] = useState({ key: 'order', dir: 'asc' });
+  const [projModalOpen, setProjModalOpen] = useState(false);
+  const [editingProj, setEditingProj] = useState(null);
+  const [projForm, setProjForm] = useState({ title: '', description: '', url: '', category: '' });
+
+  // Comments Table Controls
+  const [commSearch, setCommSearch] = useState('');
+  const [commFilter, setCommFilter] = useState('all'); // 'all' | 'pinned'
+
+  // Custom Database States
+  const [selectedColId, setSelectedColId] = useState(null);
+  const [colItems, setColItems] = useState([]);
+  const [colSearch, setColSearch] = useState('');
+  const [colFilterField, setColFilterField] = useState('all');
+  const [newColModalOpen, setNewColModalOpen] = useState(false);
+  const [newColName, setNewColName] = useState('');
+  const [newColDesc, setNewColDesc] = useState('');
+  const [newColFields, setNewColFields] = useState([{ id: 'f1', name: '', type: 'text' }]);
+  const [itemModalOpen, setItemModalOpen] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [itemDataForm, setItemDataForm] = useState({});
+
+  const showToast = (msg) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(''), 2600);
+  };
+
+  // Pastikan meta robots noindex & default tema gelap untuk /developer
+  useEffect(() => {
+    document.title = 'Panel Developer - sainbyte';
+    document.documentElement.classList.add('dark');
+
+    let metaRobots = document.querySelector('meta[name="robots"]');
+    const createdMeta = !metaRobots;
+    if (!metaRobots) {
+      metaRobots = document.createElement('meta');
+      metaRobots.name = 'robots';
+      document.head.appendChild(metaRobots);
+    }
+    const prevContent = metaRobots.content;
+    metaRobots.content = 'noindex, nofollow, noarchive';
+
+    return () => {
+      if (createdMeta) {
+        metaRobots.remove();
+      } else {
+        metaRobots.content = prevContent || '';
+      }
+      const savedTheme = localStorage.getItem('sainbyte_theme') || 'system';
+      const sysDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const shouldBeDark = savedTheme === 'system' ? sysDark : savedTheme === 'dark';
+      document.documentElement.classList.toggle('dark', shouldBeDark);
+    };
+  }, []);
+
+  // Subscribe data HANYA jika isOwner === true
+  useEffect(() => {
+    if (!isOwner) {
+      setProjects([]);
+      setComments([]);
+      setAnalytics([]);
+      setCustomCollections([]);
+      return;
+    }
+
+    const unsubProj = onSnapshot(
+      query(collection(db, 'projects'), orderBy('order', 'asc')),
+      (snap) => setProjects(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+
+    const unsubComm = onSnapshot(
+      query(collection(db, 'comments'), orderBy('createdAt', 'desc')),
+      (snap) => setComments(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+
+    const unsubVisit = onSnapshot(doc(db, 'visits', 'stats'), (snap) => {
+      if (snap.exists()) setVisitStats(snap.data());
+    });
+
+    const unsubAnalytics = onSnapshot(
+      query(collection(db, 'analytics'), orderBy('date', 'desc')),
+      (snap) => setAnalytics(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+
+    const unsubCustomCols = onSnapshot(
+      query(collection(db, 'customCollections'), orderBy('createdAt', 'asc')),
+      (snap) => {
+        const cols = snap.docs.map((d) => ({ id: d.id, ...d.data() }));
+        setCustomCollections(cols);
+        if (cols.length > 0) {
+          setSelectedColId((prev) => (cols.some((c) => c.id === prev) ? prev : cols[0].id));
+        } else {
+          setSelectedColId(null);
+        }
+      }
+    );
+
+    return () => {
+      unsubProj();
+      unsubComm();
+      unsubVisit();
+      unsubAnalytics();
+      unsubCustomCols();
+    };
+  }, [isOwner]);
+
+  // Subscribe item untuk koleksi kustom yang sedang dipilih
+  useEffect(() => {
+    if (!isOwner || !selectedColId) {
+      setColItems([]);
+      return;
+    }
+    const unsub = onSnapshot(
+      query(collection(db, 'customCollections', selectedColId, 'items'), orderBy('createdAt', 'desc')),
+      (snap) => setColItems(snap.docs.map((d) => ({ id: d.id, ...d.data() })))
+    );
+    return () => unsub();
+  }, [isOwner, selectedColId]);
+
+  const handleLoginEmail = async (e) => {
+    e.preventDefault();
+    setSubmittingLogin(true);
+    setLoginError('');
+    try {
+      await loginWithEmail(email, password);
+    } catch {
+      setLoginError('Email atau kata sandi tidak valid.');
+    } finally {
+      setSubmittingLogin(false);
+    }
+  };
+
+  const handleLoginGoogle = async () => {
+    setSubmittingLogin(true);
+    setLoginError('');
+    try {
+      await loginWithGoogle();
+    } catch {
+      setLoginError('Gagal masuk dengan akun Google.');
+    } finally {
+      setSubmittingLogin(false);
+    }
+  };
+
+  const totalClicks = useMemo(
+    () => projects.reduce((sum, p) => sum + (p.clicks || 0), 0),
+    [projects]
+  );
+
+  const projectCategories = useMemo(() => {
+    const set = new Set(projects.map((p) => (p.category || 'Umum').trim() || 'Umum'));
+    return ['Semua', ...Array.from(set).sort()];
+  }, [projects]);
+
+  const filteredProjects = useMemo(() => {
+    const q = projSearch.trim().toLowerCase();
+    const list = projects.filter((p) => {
+      const cat = (p.category || 'Umum').trim() || 'Umum';
+      const matchCat = projCategory === 'Semua' || cat === projCategory;
+      const matchQ =
+        !q ||
+        (p.title || '').toLowerCase().includes(q) ||
+        (p.url || '').toLowerCase().includes(q) ||
+        cat.toLowerCase().includes(q);
+      return matchCat && matchQ;
+    });
+
+    return [...list].sort((a, b) => {
+      const dir = projSort.dir === 'asc' ? 1 : -1;
+      if (projSort.key === 'clicks') return ((a.clicks || 0) - (b.clicks || 0)) * dir;
+      if (projSort.key === 'title') return (a.title || '').localeCompare(b.title || '') * dir;
+      if (projSort.key === 'category') return (a.category || '').localeCompare(b.category || '') * dir;
+      if (projSort.key === 'updatedAt') {
+        const ta = a.updatedAt?.toMillis ? a.updatedAt.toMillis() : 0;
+        const tb = b.updatedAt?.toMillis ? b.updatedAt.toMillis() : 0;
+        return (ta - tb) * dir;
+      }
+      return ((a.order ?? 0) - (b.order ?? 0)) * dir;
+    });
+  }, [projects, projSearch, projCategory, projSort]);
+
+  const toggleSort = (key) => {
+    setProjSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === 'asc' ? 'desc' : 'asc' }
+        : { key, dir: 'asc' }
+    );
+  };
+
+  const handleSaveProject = async (e) => {
+    e.preventDefault();
+    if (!projForm.title.trim() || !projForm.url.trim()) return;
+    try {
+      const payload = {
+        title: projForm.title.trim(),
+        description: projForm.description.trim(),
+        url: normalizeUrl(projForm.url),
+        category: projForm.category.trim() || 'Umum',
+        updatedAt: serverTimestamp()
+      };
+      if (editingProj) {
+        await updateDoc(doc(db, 'projects', editingProj.id), payload);
+        showToast('Proyek diperbarui');
+      } else {
+        const nextOrder = projects.length > 0 ? Math.max(...projects.map((p) => p.order ?? 0)) + 1 : 0;
+        await addDoc(collection(db, 'projects'), {
+          ...payload,
+          clicks: 0,
+          order: nextOrder,
+          createdAt: serverTimestamp()
+        });
+        showToast('Proyek ditambahkan');
+      }
+      setProjModalOpen(false);
+    } catch (err) {
+      showToast('Gagal menyimpan proyek');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteProject = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'projects', id));
+      showToast('Proyek dihapus');
+    } catch (err) {
+      showToast('Gagal menghapus proyek');
+      console.error(err);
+    }
+  };
+
+  const filteredComments = useMemo(() => {
+    const q = commSearch.trim().toLowerCase();
+    return comments.filter((c) => {
+      if (commFilter === 'pinned' && !c.pinned) return false;
+      if (!q) return true;
+      return (
+        (c.name || '').toLowerCase().includes(q) ||
+        (c.message || '').toLowerCase().includes(q)
+      );
+    });
+  }, [comments, commSearch, commFilter]);
+
+  const handleTogglePinComment = async (comment) => {
+    try {
+      const batch = writeBatch(db);
+      if (!comment.pinned) {
+        comments
+          .filter((c) => c.pinned && c.id !== comment.id)
+          .forEach((c) => batch.update(doc(db, 'comments', c.id), { pinned: false }));
+      }
+      batch.update(doc(db, 'comments', comment.id), { pinned: !comment.pinned });
+      await batch.commit();
+      showToast(comment.pinned ? 'Sematan dilepas' : 'Komentar disematkan');
+    } catch (err) {
+      showToast('Gagal memperbarui komentar');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteComment = async (id) => {
+    try {
+      await deleteDoc(doc(db, 'comments', id));
+      showToast('Komentar dihapus');
+    } catch (err) {
+      showToast('Gagal menghapus komentar');
+      console.error(err);
+    }
+  };
+
+  // Analitik harian (14 hari terakhir urut naik untuk grafik)
+  const chartData = useMemo(() => {
+    return [...analytics].slice(0, 14).reverse();
+  }, [analytics]);
+
+  const maxChartVal = useMemo(() => {
+    const vals = chartData.flatMap((d) => [d.visits || 0, d.clicks || 0]);
+    return Math.max(...vals, 1);
+  }, [chartData]);
+
+  // Koleksi Kustom
+  const selectedCollection = useMemo(
+    () => customCollections.find((c) => c.id === selectedColId) || null,
+    [customCollections, selectedColId]
+  );
+
+  const filteredColItems = useMemo(() => {
+    const q = colSearch.trim().toLowerCase();
+    return colItems.filter((item) => {
+      const data = item.data || {};
+      if (colFilterField !== 'all') {
+        const val = data[colFilterField];
+        if (val === undefined || val === '' || val === false) return false;
+      }
+      if (!q) return true;
+      return Object.values(data).some((v) => String(v ?? '').toLowerCase().includes(q));
+    });
+  }, [colItems, colSearch, colFilterField]);
+
+  const handleCreateCustomCollection = async (e) => {
+    e.preventDefault();
+    const cleanName = newColName.trim();
+    const validFields = newColFields
+      .map((f) => ({ ...f, name: f.name.trim() }))
+      .filter((f) => f.name.length > 0);
+    if (!cleanName || validFields.length === 0) {
+      showToast('Isi nama koleksi dan minimal 1 kolom');
+      return;
+    }
+    try {
+      const docRef = await addDoc(collection(db, 'customCollections'), {
+        name: cleanName,
+        description: newColDesc.trim(),
+        fields: validFields,
+        createdAt: serverTimestamp()
+      });
+      setSelectedColId(docRef.id);
+      setNewColModalOpen(false);
+      setNewColName('');
+      setNewColDesc('');
+      setNewColFields([{ id: 'f1', name: '', type: 'text' }]);
+      showToast('Koleksi dibuat');
+    } catch (err) {
+      showToast('Gagal membuat koleksi');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteCustomCollection = async (col) => {
+    try {
+      const batch = writeBatch(db);
+      colItems.forEach((item) => {
+        batch.delete(doc(db, 'customCollections', col.id, 'items', item.id));
+      });
+      batch.delete(doc(db, 'customCollections', col.id));
+      await batch.commit();
+      showToast('Koleksi dihapus');
+    } catch (err) {
+      showToast('Gagal menghapus koleksi');
+      console.error(err);
+    }
+  };
+
+  const openAddItemModal = () => {
+    if (!selectedCollection) return;
+    const initData = {};
+    selectedCollection.fields.forEach((f) => {
+      initData[f.name] = f.type === 'boolean' ? false : '';
+    });
+    setEditingItem(null);
+    setItemDataForm(initData);
+    setItemModalOpen(true);
+  };
+
+  const openEditItemModal = (item) => {
+    if (!selectedCollection) return;
+    const initData
