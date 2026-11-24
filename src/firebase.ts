@@ -124,8 +124,8 @@ googleDriveProvider.setCustomParameters({
 
 // When a custom Firebase project (e.g., VITE_FIREBASE_PROJECT_ID) is active for Firestore,
 // run Google Drive OAuth via the AI Studio-provisioned applet OAuth app so Drive API works reliably.
-const driveOAuthApp = isCustomProject ? initializeApp(appletConfig, 'drive-oauth') : app;
-export const driveAuth = isCustomProject ? getAuth(driveOAuthApp) : auth;
+const driveOAuthApp = app;
+export const driveAuth = auth;
 
 let cachedDriveAccessToken: string | null = null;
 const driveTokenListeners = new Set<(token: string | null) => void>();
