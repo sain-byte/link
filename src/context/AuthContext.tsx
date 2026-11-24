@@ -40,8 +40,10 @@ export function formatAuthError(err: unknown): string {
       return 'Terlalu banyak percobaan gagal. Coba lagi beberapa saat.';
     case 'auth/popup-closed-by-user':
       return 'Popup login Google ditutup sebelum selesai.';
-    case 'auth/unauthorized-domain':
-      return 'Domain situs ini belum terdaftar di Firebase Console (Authentication > Settings > Authorized domains).';
+    case 'auth/unauthorized-domain': {
+      const host = typeof window !== 'undefined' ? window.location.hostname : 'domain ini';
+      return `Domain "${host}" belum terdaftar di Firebase Console (Authentication > Settings > Authorized domains).`;
+    }
     case 'auth/network-request-failed':
       return 'Koneksi jaringan bermasalah. Periksa internet Anda.';
     case 'auth/provider-already-linked':

@@ -15,6 +15,8 @@ import {
   ArrowUp,
   ArrowUpDown,
   BarChart3,
+  Check,
+  Copy,
   Database,
   ExternalLink,
   Eye,
@@ -37,6 +39,7 @@ import {
   Trash2,
   Users,
 } from 'lucide-react';
+import firestoreRulesRaw from '../../firestore.rules?raw';
 import {
   db,
   FirebaseDiagnostics,
@@ -1273,16 +1276,38 @@ export default function DeveloperPage() {
 
         <main className="flex-1 p-4 lg:p-6 space-y-5 overflow-x-hidden">
           {(diagnostics.connectionStatus === 'error' || dataError) && (
-            <div className="rounded-xl border border-rose-800/70 bg-rose-950/40 px-4 py-3 text-xs text-rose-200 flex items-start gap-2.5 leading-relaxed">
-              <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
-              <div className="min-w-0 space-y-1">
-                <p className="font-semibold text-rose-100">
-                  Masalah Koneksi Firestore ({diagnostics.projectId})
-                </p>
-                <p className="break-words text-rose-300">
-                  {dataError || diagnostics.connectionError}
-                </p>
+            <div className="rounded-xl border border-rose-800/70 bg-rose-950/40 px-4 py-3 text-xs text-rose-200 space-y-2.5 leading-relaxed">
+              <div className="flex items-start gap-2.5">
+                <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
+                <div className="min-w-0 space-y-1">
+                  <p className="font-semibold text-rose-100">
+                    Masalah Koneksi Firestore ({diagnostics.projectId})
+                  </p>
+                  <p className="break-words text-rose-300">
+                    {dataError || diagnostics.connectionError}
+                  </p>
+                </div>
               </div>
+              {diagnostics.isCustomProject && (
+                <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rose-800/50 pt-2">
+                  <span className="font-mono text-[11px] text-rose-200/80">
+                    Salin isi firestore.rules lalu Publish di Firebase Console proyek {diagnostics.projectId}.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void navigator.clipboard
+                        .writeText(firestoreRulesRaw)
+                        .then(() => showToast('firestore.rules disalin ke clipboard'))
+                        .catch(() => showToast('Gagal menyalin firestore.rules'));
+                    }}
+                    className="inline-flex h-7 items-center gap-1.5 rounded-lg border border-rose-700/60 bg-rose-900/50 px-2.5 font-mono text-[11px] text-rose-100 hover:bg-rose-900"
+                  >
+                    <Copy className="w-3 h-3" />
+                    <span>Salin firestore.rules</span>
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
