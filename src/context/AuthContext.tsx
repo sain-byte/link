@@ -18,7 +18,6 @@ import {
   auth,
   clearDriveAccessToken,
   driveAuth,
-  getFirebaseDiagnostics,
   googleDriveProvider,
   googleProvider,
   setDriveAccessToken,
@@ -126,16 +125,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   );
 
   const loginWithGoogle = async (): Promise<UserCredential> => {
-    const diag = getFirebaseDiagnostics();
-    if (!diag.isCustomProject) {
-      const result = await signInWithPopup(auth, googleDriveProvider);
-      const cred = GoogleAuthProvider.credentialFromResult(result);
-      if (cred?.accessToken) {
-        setDriveAccessToken(cred.accessToken);
-      }
-      return result;
+    const result = await signInWithPopup(auth, googleDriveProvider);
+    const cred = GoogleAuthProvider.credentialFromResult(result);
+    if (cred?.accessToken) {
+      setDriveAccessToken(cred.accessToken);
     }
-    return signInWithPopup(auth, googleProvider);
+    return result;
   };
 
   const connectGoogleDrive = async (): Promise<string> => {

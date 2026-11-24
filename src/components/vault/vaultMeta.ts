@@ -3,6 +3,7 @@ import {
   Contact,
   FileSpreadsheet,
   FileText,
+  HardDrive,
   Image as ImageIcon,
   KeyRound,
   Layers,
@@ -12,7 +13,7 @@ import {
 } from 'lucide-react';
 import { VaultItemType } from '../../types/models';
 
-export type VaultCategoryFilter = 'all' | VaultItemType;
+export type VaultCategoryFilter = 'all' | 'drive' | VaultItemType;
 
 export interface VaultCategoryDef {
   id: VaultCategoryFilter;
@@ -29,6 +30,13 @@ export const VAULT_CATEGORIES: VaultCategoryDef[] = [
     shortCode: 'ALL',
     description: 'Seluruh item arsip digital diurutkan dari yang terbaru.',
     Icon: Layers,
+  },
+  {
+    id: 'drive',
+    label: 'Folder Drive',
+    shortCode: 'DRIVE',
+    description: 'Daftar berkas langsung dari folder privat sainbyte-vault di Google Drive.',
+    Icon: HardDrive,
   },
   {
     id: 'code',
@@ -55,7 +63,7 @@ export const VAULT_CATEGORIES: VaultCategoryDef[] = [
     id: 'doc',
     label: 'Dokumen & Sheet',
     shortCode: 'DOCS',
-    description: 'Berkas Excel, CSV, PDF, dan dokumen dari Firebase Storage.',
+    description: 'Berkas Excel, CSV, PDF, dan dokumen dari Google Drive.',
     Icon: FileSpreadsheet,
   },
   {
@@ -89,7 +97,7 @@ export const VAULT_CATEGORIES: VaultCategoryDef[] = [
 ];
 
 export const VAULT_TYPES_ONLY = VAULT_CATEGORIES.filter(
-  (c): c is VaultCategoryDef & { id: VaultItemType } => c.id !== 'all'
+  (c): c is VaultCategoryDef & { id: VaultItemType } => c.id !== 'all' && c.id !== 'drive'
 );
 
 export function getVaultCategoryMeta(id: VaultCategoryFilter): VaultCategoryDef {

@@ -257,3 +257,91 @@ export async function deleteDriveFile(
   }
   throw await parseDriveError(res, 'Gagal menghapus file di Google Drive.');
 }
+
+export interface DriveFolderFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  modifiedTime?: string;
+  webViewLink?: string;
+}
+
+export async function listVaultFolderFiles(
+  accessToken: string
+): Promise<DriveFolderFile[]> {
+  const folderId = await ensureVaultFolder(accessToken);
+  const q = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+  const fields = encodeURIComponent(
+    'files(id,name,mimeType,size,modifiedTime,webViewLink)'
+  );
+  const res = await fetch(
+    `${DRIVE_API_BASE}/files?q=${q}&spaces=drive&orderBy=modifiedTime%20desc&pageSize=100&fields=${fields}`,
+    {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }
+  );
+  if (!res.ok) {
+    throw await parseDriveError(
+      res,
+      'Gagal memuat daftar file dari folder Google Drive.'
+    );
+  }
+  const data = (await res.json()) as {
+    files?: Array<{
+      id: string;
+      name?: string;
+      mimeType?: string;
+      size?: string;
+      modifiedTime?: string;
+      webViewLink?: string;
+    }>;
+  };
+  return (data.files || []).map((f) => ({
+    id: f.id,
+    name: f.name || 'Tanpa Nama',
+    mimeType: f.mimeType || 'application/octet-stream',
+    size: f.size ? Number(f.size) : 0,
+    modifiedTime: f.modifiedTime,
+    webViewLink:
+      f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`,
+  }));
+}
+
+export function formatDriveMimeLabel(mimeType: string, fileName = ''): string {
+  const mime = mimeType.toLowerCase();
+  const lowerName = fileName.toLowerCase();
+  if (mime === 'application/vnd.google-apps.folder') return 'Folder';
+  if (mime.startsWith('image/')) {
+    const sub = mime.split('/')[1]?.toUpperCase() || 'IMG';
+    return `Gambar ${sub === 'JPEG' ? 'JPG' : sub}`;
+  }
+  if (mime === 'application/pdf' || lowerName.endsWith('.pdf')) return 'PDF';
+  if (
+    mime.includes('spreadsheet') ||
+    mime.includes('excel') ||
+    lowerName.endsWith('.xlsx') ||
+    lowerName.endsWith('.xls')
+  ) {
+    return 'Excel / Sheet';
+  }
+  if (mime === 'text/csv' || lowerName.endsWith('.csv')) return 'CSV';
+  if (
+    mime.includes('wordprocessingml') ||
+    mime.includes('msword') ||
+    lowerName.endsWith('.docx') ||
+    lowerName.endsWith('.doc')
+  ) {
+    return 'Dokumen Word';
+  }
+  if (mime.includes('json') || lowerName.endsWith('.json')) return 'JSON';
+  if (mime.startsWith('text/') || lowerName.endsWith('.txt') || lowerName.endsWith('.md')) {
+    return 'Teks / Markdown';
+  }
+  if (mime.startsWith('video/')) return 'Video';
+  if (mime.startsWith('audio/')) return 'Audio';
+  const extMatch = lowerName.match(/\.([a-z0-9]{1,8})$/);
+  if (extMatch) return extMatch[1].toUpperCase();
+  return mime.split('/')[1]?.toUpperCase() || 'Berkas';
+}
+

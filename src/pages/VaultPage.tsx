@@ -39,7 +39,9 @@ import {
   deleteDriveFile,
   downloadDriveFile,
   DriveApiError,
+  DriveFolderFile,
   fetchDriveBlobUrl,
+  listVaultFolderFiles,
   uploadFileToDrive,
 } from '../services/googleDrive';
 import { VaultItem, VaultItemType } from '../types/models';
@@ -48,7 +50,9 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import GoogleSignInButton from '../components/GoogleSignInButton';
 import Modal from '../components/Modal';
 import Toast from '../components/Toast';
+import DriveFilesPanel from '../components/vault/DriveFilesPanel';
 import VaultCard from '../components/vault/VaultCard';
+import VaultSidebarNav from '../components/vault/VaultSidebarNav';
 import {
   formatBytes,
   getVaultCategoryMeta,
@@ -91,8 +95,11 @@ export default function VaultPage() {
   const [loginNotice, setLoginNotice] = useState('');
   const [submittingLogin, setSubmittingLogin] = useState(false);
 
-  // Google Drive connect state
+  // Google Drive connect & folder listing state
   const [connectingDrive, setConnectingDrive] = useState(false);
+  const [driveFiles, setDriveFiles] = useState<DriveFolderFile[]>([]);
+  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
+  const [driveFilesError, setDriveFilesError] = useState('');
   const [driveBlobUrls, setDriveBlobUrls] = useState<Record<string, string>>({});
   const driveBlobUrlsRef = useRef<Record<string, string>>({});
   const [loadingDriveMediaIds, setLoadingDriveMediaIds] = useState<Record<string, boolean>>({});
@@ -139,7 +146,11 @@ export default function VaultPage() {
   const [loadingDocPreview, setLoadingDocPreview] = useState(false);
   const [docPreviewError, setDocPreviewError] = useState('');
   const [mediaLightboxItem, setMediaLightboxItem] = useState<VaultItem | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<VaultItem | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<
+    | { kind: 'vault'; item: VaultItem }
+    | { kind: 'driveFile'; file: DriveFolderFile }
+    | null
+  >(null);
   const [deletingItem, setDeletingItem] = useState(false);
 
   const showToast = useCallback((msg: string) => {
@@ -325,6 +336,38 @@ export default function VaultPage() {
     };
   }, [isOwner, driveAccessToken, items, showToast]);
 
+  const fetchDriveFiles = useCallback(async (tokenOverride?: string) => {
+    const token = tokenOverride || getDriveAccessToken();
+    if (!token) {
+      setDriveFiles([]);
+      setDriveFilesError('');
+      setLoadingDriveFiles(false);
+      return;
+    }
+    setLoadingDriveFiles(true);
+    setDriveFilesError('');
+    try {
+      const files = await listVaultFolderFiles(token);
+      setDriveFiles(files);
+    } catch (err) {
+      setDriveFilesError(
+        err instanceof Error ? err.message : 'Gagal memuat daftar file dari Google Drive.'
+      );
+    } finally {
+      setLoadingDriveFiles(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isOwner || !driveAccessToken) {
+      setDriveFiles([]);
+      setDriveFilesError('');
+      setLoadingDriveFiles(false);
+      return;
+    }
+    void fetchDriveFiles(driveAccessToken);
+  }, [isOwner, driveAccessToken, fetchDriveFiles]);
+
   const handleConnectDrive = async (): Promise<string | null> => {
     setConnectingDrive(true);
     try {
@@ -349,6 +392,7 @@ export default function VaultPage() {
   const countsByCategory = useMemo(() => {
     const counts: Record<VaultCategoryFilter, number> = {
       all: items.length,
+      drive: driveFiles.length,
       code: 0,
       note: 0,
       reminder: 0,
@@ -362,7 +406,7 @@ export default function VaultPage() {
       counts[item.type] = (counts[item.type] || 0) + 1;
     });
     return counts;
-  }, [items]);
+  }, [items, driveFiles.length]);
 
   // Filtered items
   const filteredItems = useMemo(() => {
@@ -515,6 +559,19 @@ export default function VaultPage() {
     }
   };
 
+  const handleDownloadDriveFolderFile = async (file: DriveFolderFile) => {
+    setDownloadingItemId(file.id);
+    try {
+      const token = await ensureDriveToken();
+      if (!token) return;
+      await downloadDriveFile(file.id, file.name || 'vault-file', token);
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : 'Gagal mengunduh file dari Google Drive.');
+    } finally {
+      setDownloadingItemId(null);
+    }
+  };
+
   // Open Document Preview Modal
   const handleOpenDocPreview = async (item: VaultItem) => {
     if (docPreviewBlobUrl) {
@@ -579,7 +636,12 @@ export default function VaultPage() {
   // Open Create / Edit Modal
   const openCreateModal = (presetType?: VaultItemType) => {
     const defaultType: VaultItemType =
-      presetType || (activeCategory === 'all' ? 'note' : activeCategory);
+      presetType ||
+      (activeCategory === 'all'
+        ? 'note'
+        : activeCategory === 'drive'
+          ? 'doc'
+          : activeCategory);
     setEditingItem(null);
     setFormType(defaultType);
     setFormTitle('');
@@ -835,6 +897,10 @@ export default function VaultPage() {
         );
       }
 
+      if (newlyUploadedDriveFileId && activeToken) {
+        void fetchDriveFiles(activeToken);
+      }
+
       setFormOpen(false);
     } catch (err) {
       const msg =
@@ -856,19 +922,35 @@ export default function VaultPage() {
     if (!deleteTarget) return;
     setDeletingItem(true);
     try {
-      if (deleteTarget.driveFileId) {
+      if (deleteTarget.kind === 'driveFile') {
+        const token = await ensureDriveToken();
+        if (!token) {
+          setDeletingItem(false);
+          showToast('Hubungkan Google Drive untuk menghapus file ini.');
+          return;
+        }
+        await deleteDriveFile(deleteTarget.file.id, token);
+        setDriveFiles((prev) => prev.filter((f) => f.id !== deleteTarget.file.id));
+        setDeleteTarget(null);
+        showToast('File dihapus dari Google Drive');
+        return;
+      }
+
+      const targetItem = deleteTarget.item;
+      if (targetItem.driveFileId) {
         const token = await ensureDriveToken();
         if (!token) {
           setDeletingItem(false);
           showToast('Hubungkan Google Drive untuk menghapus file terkait.');
           return;
         }
-        await deleteDriveFile(deleteTarget.driveFileId, token);
+        await deleteDriveFile(targetItem.driveFileId, token);
+        setDriveFiles((prev) => prev.filter((f) => f.id !== targetItem.driveFileId));
       }
 
-      if (deleteTarget.storagePath) {
+      if (targetItem.storagePath) {
         try {
-          await deleteObject(storageRef(storage, deleteTarget.storagePath));
+          await deleteObject(storageRef(storage, targetItem.storagePath));
         } catch (storageErr) {
           const code = ((storageErr as { code?: string })?.code || '').toLowerCase();
           if (code !== 'storage/object-not-found') {
@@ -877,9 +959,9 @@ export default function VaultPage() {
         }
       }
 
-      const res = await safeDeleteDoc(`vault/${deleteTarget.id}`);
+      const res = await safeDeleteDoc(`vault/${targetItem.id}`);
       if (res.usedFallback) {
-        setItems((prev) => prev.filter((it) => it.id !== deleteTarget.id));
+        setItems((prev) => prev.filter((it) => it.id !== targetItem.id));
       }
       setDeleteTarget(null);
       showToast('Arsip dihapus permanen');
@@ -1094,50 +1176,16 @@ export default function VaultPage() {
           <span>Tambah Arsip Baru</span>
         </button>
 
-        {/* Category List */}
-        <nav aria-label="Kategori Vault" className="space-y-1">
-          <p className="px-2 pb-1 font-mono text-[10px] uppercase tracking-widest text-zinc-500">
-            Kategori Arsip
-          </p>
-          {VAULT_CATEGORIES.map((cat) => {
-            const active = activeCategory === cat.id;
-            const Icon = cat.Icon;
-            const count = countsByCategory[cat.id] || 0;
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => {
-                  setActiveCategory(cat.id);
-                  setMobileDrawerOpen(false);
-                }}
-                className={`flex w-full items-center justify-between gap-2 rounded-lg border px-2.5 py-2 text-left text-xs font-medium transition-colors ${
-                  active
-                    ? 'border-emerald-500/35 bg-emerald-500/10 text-emerald-300'
-                    : 'border-transparent text-zinc-400 hover:bg-[#121216] hover:text-zinc-100'
-                }`}
-              >
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <Icon
-                    className={`h-4 w-4 shrink-0 ${
-                      active ? 'text-[#10b981]' : 'text-zinc-500'
-                    }`}
-                  />
-                  <span className="truncate">{cat.label}</span>
-                </span>
-                <span
-                  className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] tabular-nums ${
-                    active
-                      ? 'bg-emerald-500/20 text-emerald-300'
-                      : 'bg-[#121216] text-zinc-500'
-                  }`}
-                >
-                  {count}
-                </span>
-              </button>
-            );
-          })}
-        </nav>
+        {/* Category List with Smooth Sliding Indicator */}
+        <VaultSidebarNav
+          categories={VAULT_CATEGORIES}
+          activeCategory={activeCategory}
+          countsByCategory={countsByCategory}
+          onSelectCategory={(id) => {
+            setActiveCategory(id);
+            setMobileDrawerOpen(false);
+          }}
+        />
       </div>
 
       {/* Bottom Footer Actions */}
@@ -1223,18 +1271,27 @@ export default function VaultPage() {
         {sidebarContent}
       </aside>
 
-      {/* Mobile Slide-Over Drawer */}
-      {mobileDrawerOpen && (
-        <div className="fixed inset-0 z-50 flex lg:hidden">
-          <div
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm"
-            onClick={() => setMobileDrawerOpen(false)}
-          />
-          <aside className="relative z-10 h-full w-72 max-w-[85vw] border-r border-[#27272a] bg-[#0c0c0f] shadow-2xl">
-            {sidebarContent}
-          </aside>
-        </div>
-      )}
+      {/* Mobile Slide-Over Drawer (always mounted for smooth GPU slide transition) */}
+      <div
+        aria-hidden={!mobileDrawerOpen}
+        className={`fixed inset-0 z-50 flex lg:hidden ${
+          mobileDrawerOpen ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
+      >
+        <div
+          onClick={() => setMobileDrawerOpen(false)}
+          className={`fixed inset-0 bg-black/70 backdrop-blur-sm transition-opacity duration-300 ease-out ${
+            mobileDrawerOpen ? 'opacity-100' : 'opacity-0'
+          }`}
+        />
+        <aside
+          className={`relative z-10 h-full w-72 max-w-[85vw] border-r border-[#27272a] bg-[#0c0c0f] shadow-2xl transition-transform duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-transform ${
+            mobileDrawerOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
+        >
+          {sidebarContent}
+        </aside>
+      </div>
 
       {/* Main Content Area */}
       <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
@@ -1288,33 +1345,41 @@ export default function VaultPage() {
         {/* Scrollable Workspace Viewport */}
         <main className="flex-1 overflow-y-auto px-4 py-5 sm:px-6">
           <div className="mx-auto max-w-6xl space-y-5">
-            {/* Google Drive Connect Banner when in-memory token is absent */}
-            {!isDriveConnected && (
-              <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#27272a] bg-[#121216] px-4 py-3">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
-                    <HardDrive className="h-4 w-4" />
+            {/* Google Drive Connect Banner when viewing categories that don't embed DriveFilesPanel */}
+            {!isDriveConnected &&
+              activeCategory !== 'all' &&
+              activeCategory !== 'drive' &&
+              activeCategory !== 'doc' &&
+              activeCategory !== 'media' && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#27272a] bg-[#121216] px-4 py-3">
+                  <div className="flex min-w-0 items-center gap-2.5">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-emerald-500/30 bg-emerald-500/10 text-emerald-400">
+                      <HardDrive className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-zinc-100">
+                        Google Drive Privat (Folder{' '}
+                        <span className="font-mono text-emerald-400">sainbyte-vault</span>)
+                      </p>
+                      <p className="text-[11px] text-zinc-400">
+                        Hubungkan Google Drive di sesi ini untuk mengunggah, menampilkan foto, dan mengunduh dokumen privat.
+                      </p>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-semibold text-zinc-100">
-                      Google Drive Privat (Folder <span className="font-mono text-emerald-400">sainbyte-vault</span>)
-                    </p>
-                    <p className="text-[11px] text-zinc-400">
-                      Hubungkan Google Drive di sesi ini untuk mengunggah, menampilkan foto, dan mengunduh dokumen privat.
-                    </p>
-                  </div>
+                  <GoogleSignInButton
+                    label={connectingDrive ? 'Menghubungkan...' : 'Hubungkan Google Drive'}
+                    disabled={connectingDrive}
+                    onClick={() => void handleConnectDrive()}
+                    className="h-9 shrink-0 px-3 text-xs"
+                  />
                 </div>
-                <GoogleSignInButton
-                  label={connectingDrive ? 'Menghubungkan...' : 'Hubungkan Google Drive'}
-                  disabled={connectingDrive}
-                  onClick={() => void handleConnectDrive()}
-                  className="h-9 shrink-0 px-3 text-xs"
-                />
-              </div>
-            )}
+              )}
 
-            {/* Section Title Bar */}
-            <div className="flex flex-wrap items-end justify-between gap-2 border-b border-[#27272a] pb-3.5">
+            {/* Section Title Bar with smooth fade transition on category switch */}
+            <div
+              key={`header-${activeCategory}`}
+              className="animate-fade-in-up flex flex-wrap items-end justify-between gap-2 border-b border-[#27272a] pb-3.5"
+            >
               <div>
                 <div className="flex items-center gap-2">
                   <activeCategoryMeta.Icon className="h-4 w-4 text-[#10b981]" />
@@ -1322,7 +1387,9 @@ export default function VaultPage() {
                     {activeCategoryMeta.label}
                   </h1>
                   <span className="rounded-md border border-[#27272a] bg-[#121216] px-2 py-0.5 font-mono text-[11px] text-emerald-400 tabular-nums">
-                    {filteredItems.length} item
+                    {activeCategory === 'drive'
+                      ? `${driveFiles.length} file`
+                      : `${filteredItems.length} item`}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-zinc-400">
@@ -1340,114 +1407,154 @@ export default function VaultPage() {
               )}
             </div>
 
-            {/* Data Error Banner + 1-click firestore.rules copy helper for custom project */}
-            {dataError && (
-              <div className="space-y-3 rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-xs text-rose-200">
-                <div className="flex items-start gap-2.5">
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
-                  <p className="leading-relaxed">{dataError}</p>
-                </div>
-                {diagnostics.isCustomProject && (
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rose-500/25 pt-2.5">
-                    <span className="font-mono text-[11px] text-rose-200/80">
-                      Proyek aktif: <strong>{diagnostics.projectId}</strong> → Salin rules terbaru lalu Publish di Firebase Console.
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => void handleCopyFirestoreRules()}
-                      className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-400/40 bg-rose-900/40 px-3 font-mono text-[11px] font-medium text-rose-100 hover:bg-rose-900/70"
-                    >
-                      {copiedRules ? (
-                        <Check className="h-3.5 w-3.5 text-emerald-400" />
-                      ) : (
-                        <Copy className="h-3.5 w-3.5" />
-                      )}
-                      <span>{copiedRules ? 'firestore.rules Disalin' : 'Salin firestore.rules'}</span>
-                    </button>
-                  </div>
-                )}
-              </div>
+            {/* Authorized Google Drive Folder Files List */}
+            {(activeCategory === 'drive' ||
+              activeCategory === 'all' ||
+              activeCategory === 'doc' ||
+              activeCategory === 'media') && (
+              <DriveFilesPanel
+                files={driveFiles}
+                loading={loadingDriveFiles}
+                error={driveFilesError}
+                isDriveConnected={isDriveConnected}
+                connectingDrive={connectingDrive}
+                downloadingFileId={downloadingItemId}
+                searchQuery={searchQuery}
+                forceExpanded={activeCategory === 'drive'}
+                onConnectDrive={() => void handleConnectDrive()}
+                onRefresh={() => void fetchDriveFiles()}
+                onDownload={(file) => void handleDownloadDriveFolderFile(file)}
+                onDelete={(file) => setDeleteTarget({ kind: 'driveFile', file })}
+                onUploadNew={() =>
+                  openCreateModal(activeCategory === 'media' ? 'media' : 'doc')
+                }
+              />
             )}
 
-            {/* Loading Skeletons */}
-            {loadingData ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {[1, 2, 3, 4, 5, 6].map((idx) => (
-                  <div
-                    key={idx}
-                    className="h-44 animate-pulse rounded-xl border border-[#27272a] bg-[#121216] p-4"
-                  >
-                    <div className="h-4 w-20 rounded bg-zinc-800" />
-                    <div className="mt-3 h-5 w-3/4 rounded bg-zinc-800" />
-                    <div className="mt-4 h-16 w-full rounded bg-[#09090b]" />
+            {activeCategory !== 'drive' && (
+              <>
+                {/* Data Error Banner + 1-click firestore.rules copy helper for custom project */}
+                {dataError && (
+                  <div className="space-y-3 rounded-xl border border-rose-500/40 bg-rose-950/30 p-4 text-xs text-rose-200">
+                    <div className="flex items-start gap-2.5">
+                      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-rose-400" />
+                      <p className="leading-relaxed">{dataError}</p>
+                    </div>
+                    {diagnostics.isCustomProject && (
+                      <div className="flex flex-wrap items-center justify-between gap-2 border-t border-rose-500/25 pt-2.5">
+                        <span className="font-mono text-[11px] text-rose-200/80">
+                          Proyek aktif: <strong>{diagnostics.projectId}</strong> → Salin rules terbaru lalu Publish di Firebase Console.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => void handleCopyFirestoreRules()}
+                          className="inline-flex h-8 items-center gap-1.5 rounded-lg border border-rose-400/40 bg-rose-900/40 px-3 font-mono text-[11px] font-medium text-rose-100 hover:bg-rose-900/70"
+                        >
+                          {copiedRules ? (
+                            <Check className="h-3.5 w-3.5 text-emerald-400" />
+                          ) : (
+                            <Copy className="h-3.5 w-3.5" />
+                          )}
+                          <span>{copiedRules ? 'firestore.rules Disalin' : 'Salin firestore.rules'}</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
-                ))}
-              </div>
-            ) : filteredItems.length === 0 ? (
-              /* Empty State */
-              <div className="flex flex-col items-center justify-center rounded-xl border border-dashed border-[#27272a] bg-[#121216]/60 px-6 py-14 text-center">
-                <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#27272a] bg-[#09090b] text-[#10b981]">
-                  <activeCategoryMeta.Icon className="h-5 w-5" />
-                </div>
-                <h2 className="mt-3.5 text-sm font-semibold text-zinc-100">
-                  {searchQuery
-                    ? 'Tidak ada arsip yang cocok'
-                    : `Belum ada item di ${activeCategoryMeta.label}`}
-                </h2>
-                <p className="mt-1 max-w-sm text-xs leading-relaxed text-zinc-400">
-                  {searchQuery
-                    ? 'Coba kata kunci judul, konten, atau #tag lain, atau bersihkan filter pencarian.'
-                    : 'Simpan skrip kode, catatan penting, pengingat, kredensial rahasia, tautan, atau unggah foto & Excel ke Google Drive privat Anda.'}
-                </p>
-                <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
-                  {searchQuery ? (
-                    <button
-                      type="button"
-                      onClick={() => setSearchQuery('')}
-                      className="h-9 rounded-lg border border-[#27272a] bg-[#09090b] px-4 text-xs font-medium text-zinc-200 hover:border-zinc-600"
-                    >
-                      Bersihkan Pencarian
-                    </button>
-                  ) : null}
-                  <button
-                    type="button"
-                    onClick={() => openCreateModal()}
-                    className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10b981] px-4 text-xs font-semibold text-zinc-950 transition-colors hover:bg-[#34d399]"
+                )}
+
+                {/* Loading Skeletons */}
+                {loadingData ? (
+                  <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                    {[1, 2, 3, 4, 5, 6].map((idx) => (
+                      <div
+                        key={idx}
+                        className="h-44 animate-pulse rounded-xl border border-[#27272a] bg-[#121216] p-4"
+                      >
+                        <div className="h-4 w-20 rounded bg-zinc-800" />
+                        <div className="mt-3 h-5 w-3/4 rounded bg-zinc-800" />
+                        <div className="mt-4 h-16 w-full rounded bg-[#09090b]" />
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredItems.length === 0 ? (
+                  /* Empty State */
+                  <div className="animate-fade-in-up flex flex-col items-center justify-center rounded-xl border border-dashed border-[#27272a] bg-[#121216]/60 px-6 py-14 text-center">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl border border-[#27272a] bg-[#09090b] text-[#10b981]">
+                      <activeCategoryMeta.Icon className="h-5 w-5" />
+                    </div>
+                    <h2 className="mt-3.5 text-sm font-semibold text-zinc-100">
+                      {searchQuery
+                        ? 'Tidak ada arsip yang cocok'
+                        : `Belum ada item di ${activeCategoryMeta.label}`}
+                    </h2>
+                    <p className="mt-1 max-w-sm text-xs leading-relaxed text-zinc-400">
+                      {searchQuery
+                        ? 'Coba kata kunci judul, konten, atau #tag lain, atau bersihkan filter pencarian.'
+                        : 'Simpan skrip kode, catatan penting, pengingat, kredensial rahasia, tautan, atau unggah foto & Excel ke Google Drive privat Anda.'}
+                    </p>
+                    <div className="mt-4 flex flex-wrap items-center justify-center gap-2.5">
+                      {searchQuery ? (
+                        <button
+                          type="button"
+                          onClick={() => setSearchQuery('')}
+                          className="h-9 rounded-lg border border-[#27272a] bg-[#09090b] px-4 text-xs font-medium text-zinc-200 hover:border-zinc-600"
+                        >
+                          Bersihkan Pencarian
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        onClick={() => openCreateModal()}
+                        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[#10b981] px-4 text-xs font-semibold text-zinc-950 transition-colors hover:bg-[#34d399]"
+                      >
+                        <Plus className="h-4 w-4 stroke-[2.5]" />
+                        <span>Tambah Arsip Pertama</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  /* Cards Grid with smooth stagger transition on category switch */
+                  <div
+                    key={`grid-${activeCategory}`}
+                    className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3"
                   >
-                    <Plus className="h-4 w-4 stroke-[2.5]" />
-                    <span>Tambah Arsip Pertama</span>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              /* Cards Grid */
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {filteredItems.map((item) => (
-                  <VaultCard
-                    key={item.id}
-                    item={item}
-                    copiedKey={copiedKey}
-                    isRevealed={Boolean(revealedIds[item.id])}
-                    togglingDone={Boolean(togglingDoneIds[item.id])}
-                    isDriveConnected={isDriveConnected}
-                    resolvedMediaUrl={item.driveFileId ? driveBlobUrls[item.driveFileId] : undefined}
-                    loadingMedia={
-                      item.driveFileId ? Boolean(loadingDriveMediaIds[item.driveFileId]) : false
-                    }
-                    downloadingFile={downloadingItemId === item.id}
-                    onConnectDrive={() => void handleConnectDrive()}
-                    onCopy={(key, val, label) => void handleCopy(key, val, label)}
-                    onToggleReveal={handleToggleReveal}
-                    onToggleDone={(it) => void handleToggleDone(it)}
-                    onPreviewDoc={(it) => void handleOpenDocPreview(it)}
-                    onPreviewMedia={(it) => void handleOpenMediaLightbox(it)}
-                    onDownloadFile={(it) => void handleDownloadFile(it)}
-                    onSelectTag={(tag) => setSearchQuery(`#${tag}`)}
-                    onEdit={openEditModal}
-                    onDelete={setDeleteTarget}
-                  />
-                ))}
-              </div>
+                    {filteredItems.map((item, idx) => (
+                      <div
+                        key={item.id}
+                        style={{ animationDelay: `${Math.min(idx, 10) * 32}ms` }}
+                        className="animate-card-stagger"
+                      >
+                        <VaultCard
+                          item={item}
+                          copiedKey={copiedKey}
+                          isRevealed={Boolean(revealedIds[item.id])}
+                          togglingDone={Boolean(togglingDoneIds[item.id])}
+                          isDriveConnected={isDriveConnected}
+                          resolvedMediaUrl={
+                            item.driveFileId ? driveBlobUrls[item.driveFileId] : undefined
+                          }
+                          loadingMedia={
+                            item.driveFileId
+                              ? Boolean(loadingDriveMediaIds[item.driveFileId])
+                              : false
+                          }
+                          downloadingFile={downloadingItemId === item.id}
+                          onConnectDrive={() => void handleConnectDrive()}
+                          onCopy={(key, val, label) => void handleCopy(key, val, label)}
+                          onToggleReveal={handleToggleReveal}
+                          onToggleDone={(it) => void handleToggleDone(it)}
+                          onPreviewDoc={(it) => void handleOpenDocPreview(it)}
+                          onPreviewMedia={(it) => void handleOpenMediaLightbox(it)}
+                          onDownloadFile={(it) => void handleDownloadFile(it)}
+                          onSelectTag={(tag) => setSearchQuery(`#${tag}`)}
+                          onEdit={openEditModal}
+                          onDelete={(it) => setDeleteTarget({ kind: 'vault', item: it })}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
             )}
           </div>
         </main>
@@ -1956,15 +2063,21 @@ export default function VaultPage() {
         open={Boolean(deleteTarget)}
         onClose={() => setDeleteTarget(null)}
         onConfirm={handleConfirmDelete}
-        title="Hapus Item Vault"
+        title={deleteTarget?.kind === 'driveFile' ? 'Hapus File Google Drive' : 'Hapus Item Vault'}
         message={
-          deleteTarget?.driveFileId
-            ? 'Hapus arsip ini beserta file privatnya di Google Drive (sainbyte-vault)?'
-            : deleteTarget?.storagePath
-              ? 'Hapus arsip ini beserta file di Firebase Storage?'
-              : 'Hapus item arsip ini dari Vault?'
+          deleteTarget?.kind === 'driveFile'
+            ? 'Hapus file ini secara permanen dari folder Google Drive (sainbyte-vault)?'
+            : deleteTarget?.item.driveFileId
+              ? 'Hapus arsip ini beserta file privatnya di Google Drive (sainbyte-vault)?'
+              : deleteTarget?.item.storagePath
+                ? 'Hapus arsip ini beserta file di Firebase Storage?'
+                : 'Hapus item arsip ini dari Vault?'
         }
-        detail={deleteTarget?.title}
+        detail={
+          deleteTarget?.kind === 'driveFile'
+            ? deleteTarget.file.name
+            : deleteTarget?.item.title
+        }
         confirmLabel="Ya, Hapus Permanen"
         loading={deletingItem}
       />
